@@ -10,13 +10,12 @@
     forever unless a shutdown sequence occurs.
 """
 
-# Python standard library imports
+# Python stdlib imports
 import os
 import sys
 import traceback
 import argparse
 import logging
-import pickle
 
 # Core library imports
 from core import Core
@@ -95,11 +94,15 @@ def main():
 
 def init(core_obj, comm_obj):
     """Initialization function for the main loop"""
+    ready = False
+
     # Get core_obj pickled data from previous sessions
     try:
         logging.debug('Populating Core with saved data')
         #TODO(evan): populate core object with pickled data
+        logging.debug('Core object persistant data successfully populated')
     except:
+        # This is not a critical error, but send a warning
         logging.warning('No existing data found. Data will need to be '
                         'inputted manually')
 
@@ -114,14 +117,26 @@ def init(core_obj, comm_obj):
         raise
 
     try:
-        logging.debug('Performing bootup handshake with Arduino')
-        # Write single byte (0xFF to Arduino)
+        logging.debug('Sending system ready signal to Arduino')
+        comm_obj.write(0xAA, 0x00) # Write the system ready control signal
+        logging.debug('Signal sent, waiting for Arduino response')
 
-        # Wait until code 0xFF is read back from Arduino. This means the
-        # connection is fully successful and ready to begin processing data
+        # Wait until control code 0xAA is read back from Arduino
+        while ready is False:
+            try:
+                logging.info('Waiting for Stomp system ready signal...')
+                ctrl, arg = comm_obj.read()
+
+                if ctrl == 0xAA and arg == 0x00:
+                    logging.info('Ready signal recieved. Continuing')
+                    ready = True
+            except:
+                logging.error('Error occured during serial ready signal read')
+                raise
+
         logging.debug('Communication established. Ready for command processing')
     except:
-        logging.error('Could not talk with Arduino device. Bootup handshaking '
+        logging.error('Could not talk with Arduino device. Ready signal handshake '
                       'unsuccessful. Ending now')
         raise
 

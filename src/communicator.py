@@ -42,14 +42,14 @@ class Communicator:
     """
 
     # Class constants
-    __BYTES_PER_MESSAGE = 2
+    _BYTES_PER_MESSAGE = 2
 
     # Initialization function
-    def __init__(self, device=None, baudrate=9600, is_connected=False):
+    def __init__(self, device=None, baudrate=9600):
         """Begin Communicator definition"""
         self.__device = device
         self.__baudrate = baudrate
-        self.__is_connected = is_connected
+        self.__is_connected = False
         self.__serial = None
 
     # Private functions
@@ -133,7 +133,7 @@ class Communicator:
         """
         if self.__is_connected:
             logging.debug('Begin control message read')
-            in_data = read(__BYTES_PER_MESSAGE)
+            in_data = read(_BYTES_PER_MESSAGE)
             control, value = ControlProtocol.parse_incoming(in_data)
             logging.debug('Control message successfully read and parsed')
             return control, value
