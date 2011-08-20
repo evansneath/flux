@@ -1,218 +1,276 @@
-#!/usr/bin/python3.2
+#!/usr/bin/python2.7
 
 """core.py
     This is the Flux Core class designed to communicate
     via serial chatter between the warp and stomp modules. This
     does so through the pySerial library. The effects heirarchy
-    and their properties are also organized in this class.
+    and their traits are also organized in this class.
 """
 
-# Python standard library imports
+# Python library imports
 import logging
 
-#TODO(evan): Implement the Core.effects and Effect.properties lists
-#            as dictionaries for a 1:1 name-object lookup time. This
-#            will make things much more responsive.
+class Control(object):
+    """Control class
+    
+    A control object stores its unique control identifier used to communicate
+    to the Stomp subsystem as well as an actively updated value.
+    
+    Attributes:
+        name: The readable name of the control.
+        identifier: The control's byte message identifier.
+    """
+    def __init__(self, name, id):
+        """Initialization function for a new control object
+        
+        Arguments:
+            name: The readable name of the control.
+            id: The control's byte message identifier.
+        """
+        
+        self.__name = name
+        self.__identifier = id
+    
+    def __get_name(self):
+        """Getter for the control name"""
+        return self.__name
 
+    def __set_name(self, name):
+        """Setter for the control name"""
+        self.__name = name
+    
+    def __get_identifier(self):
+        """Getter for the control id"""
+        return self.__identifier
+    
+    def __set_identifier(self, id):
+        """Setter for the control id"""
+        self.__identifier = id
 
-class Property(object):
-    """Property class
+    name = property(fget=__get_name, fset=__set_name,
+                    doc='Gets or sets the control name')
+    identifier = property(fget=__get_identifier, fset=__set_identifier,
+                          doc='Gets or sets the control id')
 
-    A Property object stores a single property relating
-    to a parent Effect. This property has a name as well
-    as a default property value and a property modifying
-    control located on the Stomp system.
+class SwitchControl(Control):
+    """SwitchControl class
+    
+    A subclass of control used to represent a switch control.
+    
+    Attributes:
+        is_active: Determines whether the switch is on or off.
+    """
+    
+    def __get_is_active(self):
+        """Getter for the switch's current state"""
+        return self.__is_active
+    
+    def __set_is_active(self, is_active):
+        """Setter for the switch's current state"""
+        self.__is_active = is_active
+    
+    is_active = property(fget=__get_is_active, fset=__set_is_active,
+                         doc='Gets or sets the switch current active state')
+
+class DialControl(Control):
+    """DialControl class
+    
+    A subclass of control used to represent a dial control.
+    
+    Attributes:
+        percent: The percentage value of the dial (0=min, 100=max)
+    """
+    
+    def __get_percent(self):
+        """Getter for the dial's current percentage value"""
+        return self.__percent
+    
+    def __set_percent(self, percent):
+        """Setter for the dial's current percentage value"""
+        self.__percent = percent
+    
+    percent = property(fget=__get_percent, fset=__set_percent,
+                       doc='Gets or sets the dial current percentage')
+
+class WahControl(DialControl):
+    """WahControl class
+    
+    A subclass of control used to represent a wah control.
+    
+    """
+    pass
+
+class Trait(object):
+    """Trait class
+
+    A trait object stores a single character trait relating
+    to a parent effect. This trait has a name as well
+    as a trait modifying control located on the Stomp system.
 
     Attributes:
-        parent: The property's parent effect
-        name: The string formatted name of the property
+        parent: The trait's parent effect
+        name: The string formatted name of the trait
         control: The controlling hardware input
-        value: The value of the property's control
     """
 
     # Initialization function
-    def __init__(self, parent, name, control, value=0):
-        """Initialization function for a new Property object
+    def __init__(self, parent, name, control):
+        """Initialization function for a new trait object.
 
         Arguments:
-            parent: The Property's parent class.
-            name: The name of the Property.
-            control: The device on the hardware to
-                     control the Property value.
-            value: The value of the Property.
+            parent: The trait's parent effect.
+            name: The name of the trait.
+            control: The device on the hardware to control.
         """
 
         self.__parent = parent
         self.__name = name
         self.__control = control
-        self.__value = value
 
     # Private functions
     def __get_parent(self):
-        """Getter for the Property parent. Parent value may
-           not be changed as this property is owned completely"""
+        """Getter for the trait parent. Parent value may
+           not be changed as this trait is owned completely"""
         return self.__parent
 
     def __get_name(self):
-        """Getter for the Property name"""
+        """Getter for the trait name"""
         return self.__name
 
     def __set_name(self, new_name):
-        """Setter for the Property name"""
+        """Setter for the trait name"""
         self.__name = new_name
 
-    def __get_value(self):
-        """Setter for the Property value. Not all properties
-           may have their values set (e.g. potentiometer, toggle)"""
-        return self.__value
-
     def __get_control(self):
-        """Getter for the Property control"""
+        """Getter for the trait control"""
         return self.__control
 
     def __set_control(self, new_control):
-        """Setter for the Property control"""
+        """Setter for the trait control"""
         self.__control = new_control
 
     # Property declarations
     parent = property(fget=__get_parent, 
                       doc='Gets the parent effect name')
     name = property(fget=__get_name, fset=__set_name,
-                    doc='Gets or sets the property name')
-    value = property(fget=__get_value, 
-                     doc='Gets or sets the property value')
+                    doc='Gets or sets the trait name')
     control = property(fget=__get_control, fset=__set_control,
-                       doc='Gets or sets the active property control')
-
+                       doc='Gets or sets the active trait control')
 
 class Effect(object):
     """Effect class
 
-    An Effect object stores all details relating to a
+    An effect object stores all details relating to a
     single board effect. This includes its name, list
-    of effect properties, and whether it is active or
+    of effect traits, and whether it is active or
     not. This allows for easy access to effects data
 
     Attributes:
-        name: The string formatted name of the effect
-        shred: The file name of the effect's ChucK shred
-        is_active: Whether the effect is turned ON or OFF
-        properties: A list of effect properties
+        name: The string formatted name of the effect.
+        is_active: Whether the effect is turned on or off.
+        traits: A list of effect traits.
     """
 
     # Initialization function
-    def __init__(self, name, shred, is_active=False):
-        """Initialization function for a new Effect object
+    def __init__(self, name, is_active=False):
+        """Initialization function for a new effect object
 
         Arguments:
-            name: The name to give the Effect.
-            shred: The shred file name to give the Effect.
-            is_active: Whether the Effect is active from initialization.
+            name: The name to give the effect.
+            is_active: Whether the effect is active from initialization.
         """
         self.__name = name
-        self.__shred = shred
         self.__is_active = is_active
-        self.__properties = []
+        self.__traits = []
 
     # Private functions
     def __get_name(self):
-        """Getter for the Effect name property"""
+        """Getter for the effect name property"""
         return self.__name
 
     def __set_name(self, new_name):
-        """Setter for the Effect name property"""
+        """Setter for the effect name property"""
         self.__name = new_name
 
-    def __get_shred(self):
-        """Getter for the Effect shred property"""
-        return self.__shred
-
-    def __set_shred(self, new_shred):
-        """Setter for the Effect shred property"""
-        self.__shred = new_shred
-
     def __get_is_active(self):
-        """Getter for the Effect is_active property"""
+        """Getter for the effect is_active property"""
         return self.__is_active
 
     def __set_is_active(self, new_is_active):
-        """Setter for the Effect is_active property"""
+        """Setter for the effect is_active property"""
         self.__is_active = new_is_active
 
-    def __get_properties(self):
-        """Getter for the Effect list of properties"""
-        return self.__properties
+    def __get_traits(self):
+        """Getter for the effect list of traits"""
+        return self.__traits
 
     # Property declarations
     name = property(fget=__get_name, fset=__set_name,
                     doc='Gets or sets the effect name')
-    shred = property(fget=__get_shred, fset=__set_shred,
-                     doc='Gets or sets the associated shred')
     is_active = property(fget=__get_is_active, fset=__set_is_active,
                          doc='Gets or sets the active state of the effect')
-    properties = property(fget=__get_properties, 
-                          doc='Gets the list of properties')
+    traits = property(fget=__get_traits, 
+                          doc='Gets the list of traits')
 
     # Public functions
     def toggle(self):
-        """Toggles the effect ON or OFF depending on current state"""
+        """Toggles the effect on or off depending on current state"""
         self.__is_active = not self.__is_active
 
-    def add_property(self, name, control, value=0):
-        """Adds a new Property object to the Effect's property list"""
+    def add_trait(self, name, control, value=0):
+        """Adds a new trait object to the effect's trait list"""
         try:
-            self.properties.append(Property(self.__name, name, control, value))
-            logging.debug('Added new property ''{0}'' to '
+            self.traits.append(Trait(self.__name, name, control))
+            logging.debug('Added new trait ''{0}'' to '
                           'effect ''{1}'''.format(name, self.__name))
             return True
         except:
-            logging.debug('Cannot add property ''{0}'' '
+            logging.debug('Cannot add trait ''{0}'' '
                           'to effect ''{1}'''.format(name, self.__name))
             return False
 
-    def remove_property(self, name):
-        """Removes an existing Property object from the 
-           Effect's property list
+    def remove_trait(self, name):
+        """Removes an existing trait object from the 
+           effect's trait list
 
         Arguments:
-            name: The name of the property to remove.
+            name: The name of the trait to remove.
         Returns:
             True on success. False if otherwise.
         """
         try:
-            self.__properties.remove(find_property(name))
-            logging.debug('Removed property ''{0}'' from '
+            self.__traits.remove(find_trait(name))
+            logging.debug('Removed trait ''{0}'' from '
                           'effect ''{1}'''.format(name, self._name))
             return True
         except:
-            logging.debug('Cannot remove property ''{0}''. Not found '
+            logging.debug('Cannot remove trait ''{0}''. Not found '
                           'in effect ''{1}'''.format(name, self.__name))
             return False
 
-    def find_property(self, name):
-        """Search for a property by name
+    def find_trait(self, name):
+        """Search for a trait by name
 
         Arguments:
-            name: The name of the property to search for.
+            name: The name of the trait to search for.
         Returns:
-            The first property found by the given name. None if not found.
+            The first trait found by the given name. None if not found.
         """
         found = None
-        for prop in self.__properties:
-            if prop.name == name:
-                found = prop
+        for trait in self.__traits:
+            if trait.name == name:
+                found = trait
                 break
         return found
-
 
 class Core(object):
     """Core class
 
-    A Core object's main priority to to contain the
+    A core object's main priority to to contain the
     list of effects.
 
     Attributes:
-        effect_list: A list of Flux effects
+        effect_list: A list of Flux effects.
     """
 
     # Initialization function
@@ -222,7 +280,7 @@ class Core(object):
 
     # Private functions
     def __get_effects(self):
-        """Getter for the Core list of effects"""
+        """Getter for the core list of effects"""
         return self.__effects
 
     # Property declarations
@@ -230,19 +288,18 @@ class Core(object):
                        doc='Gets the list of effects')
 
     # Public functions
-    def add_effect(self, name, shred, is_active=False):
-        """Adds a new Effect object to the Core.
+    def add_effect(self, name, is_active=False):
+        """Adds a new effect object to the core.
 
         Arguments:
-            name: A name to give to the new Effect. (default: None)
-            shred: A shred file name to give the new Effect. (default: None)
-            is_active: Determines whether the Effect is automatically
+            name: A name to give to the new effect. (default: None)
+            is_active: Determines whether the effect is automatically
                        enabled or not. (default: False)
         Returns:
-            True on success, False if otherwise.
+            True on success. False if otherwise.
         """
         try:
-            self.__effects.append(Effect(name, shred, is_active))
+            self.__effects.append(Effect(name, is_active))
             logging.debug('Added new effect ''{0}'' to core'.format(name))
             return True
         except:
@@ -250,12 +307,12 @@ class Core(object):
             return False
 
     def remove_effect(self, name):
-        """Removes an existing Effect object from the Core.
+        """Removes an existing effect object from the Core.
 
         Arguments:
             name: The name of the effect to remove.
         Returns:
-            True on success, False if otherwise.
+            True on success. False if otherwise.
         """
         try:
             self.__effects.remove(find_effect(name))
@@ -291,10 +348,9 @@ class Core(object):
         for effect in self.__effects:
             print('<Effect {0}> - Name:{1}'.format(
                   self.__effects.index(effect), effect.name))
-            for prop in effect.properties:
-                 print('\t<Property {0}> - Name:{1}'.format(
-                       effect.properties.index(prop), prop.name))
-
+            for trait in effect.traits:
+                 print('\t<Trait {0}> - Name:{1}'.format(
+                       effect.traits.index(trait), trait.name))
 
 # Main function for class file 
 # (should remain relatively unused outside of small-scale class testing)

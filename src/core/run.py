@@ -1,4 +1,4 @@
-#!/usr/bin/python3.2
+#!/usr/bin/python2.7
 
 """run.py
     This module is the main running module for the Flux Core application.
@@ -10,7 +10,7 @@
     forever unless a shutdown sequence occurs.
 """
 
-# Python stdlib imports
+# Python library imports
 import os
 import sys
 import traceback
@@ -24,7 +24,7 @@ from communicator import Communicator
 
 def main():
     """The primary, infinitely running module which handles and serves the
-       Arduino control requests as well as executing ChucK shreds accordingly.
+       Arduino control requests as well as executing signal processing accordingly.
     """
 
     # Parse command line arguments
@@ -115,31 +115,7 @@ def init(core_obj, comm_obj):
         logging.error('Could not connect to Arduino device. '
                       'None found on host system. Ending now')
         raise
-
-    try:
-        logging.debug('Sending system ready signal to Arduino')
-        comm_obj.write(0xAA, 0x00) # Write the system ready control signal
-        logging.debug('Signal sent, waiting for Arduino response')
-
-        # Wait until control code 0xAA is read back from Arduino
-        while ready is False:
-            try:
-                logging.info('Waiting for Stomp system ready signal...')
-                ctrl, arg = comm_obj.read()
-
-                if ctrl == 0xAA and arg == 0x00:
-                    logging.info('Ready signal recieved. Continuing')
-                    ready = True
-            except:
-                logging.error('Error occured during serial ready signal read')
-                raise
-
-        logging.debug('Communication established. Ready for command processing')
-    except:
-        logging.error('Could not talk with Arduino device. Ready signal handshake '
-                      'unsuccessful. Ending now')
-        raise
-
+    
     return
 
 def loop(core_obj, comm_obj):
@@ -157,6 +133,7 @@ def loop(core_obj, comm_obj):
 
         logging.debug('Control message received. Reacting to message')
         # Act on message contents (reactor function)
+        #decision(control, value)
 
         return # **temporary**
 

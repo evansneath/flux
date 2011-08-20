@@ -1,4 +1,4 @@
-#!/usr/bin/python3.2
+#!/usr/bin/python2.7
 
 """communicator.py
     This is the Flux Stomp to Core serial communication manager.
@@ -7,7 +7,7 @@
     communcation that is read and then parses it into usable commands.
 """
 
-# Python standard library imports
+# Python library imports
 import serial
 import logging
 
@@ -17,18 +17,26 @@ class ControlProtocol:
     Provides standard serial Stomp-to-Core message protocol
     functions to parse from raw data or assemble a new message.
     """
+    
+    # Class constants
+    IS_MODIFIED_MESSAGE_SIZE = 1
+    CONTROL_MESSAGE_SIZE = 5
 
     # Public functions
-    def parse_incoming(raw_bits):
-        #TODO(evan): Make this method: bytes --> control, value
-
-        return #control, value
-
-    def build_outgoing(control, value):
-        #TODO(evan): Make this method: control, value --> bytes
-
-        return #raw_bits
-
+    def parse(raw_bytes):
+        """Parses a string of raw data read from the Stomp device into an
+           active control and its value.
+           
+        Arguments:
+            raw_bytes: A string of data to parse.
+        Returns:
+            control: The modified control's identifier.
+            value: The modified control's new value.
+        """
+        #first byte = control identifier
+        #next 4 bytes = value
+        return control, value
+    
 class Communicator:
     """Communicator class
 
@@ -40,9 +48,6 @@ class Communicator:
         baudrate: The bits per second transfer rate of the serial connection.
         is_connected: Displays current connection status.
     """
-
-    # Class constants
-    _BYTES_PER_MESSAGE = 2
 
     # Initialization function
     def __init__(self, device=None, baudrate=9600):
@@ -84,7 +89,7 @@ class Communicator:
     # Public functions
     def connect(self):
         """Creates a serial connection between the object and the device
-           port specified with the chosen baudrate
+           port specified with the chosen baudrate.
 
         Arguments:
             device: Location of the device to attempt a serial connection.
@@ -133,38 +138,25 @@ class Communicator:
         """
         if self.__is_connected:
             logging.debug('Begin control message read')
-            in_data = read(_BYTES_PER_MESSAGE)
-            control, value = ControlProtocol.parse_incoming(in_data)
-            logging.debug('Control message successfully read and parsed')
-            return control, value
+            
+            # Read flag indicating control value change
+            in_data = read(ControlProtocol.IS_MODIFIED_MESSAGE_SIZE)
+            
+            if in_data == True:
+                logging.debug('Control modified. Parsing new value')
+                
+                in_data = read(ControlProtocol.CONTROL_MESSAGE_SIZE)
+                control, value = ControlProtocol.parse_incoming(in_data)
+                
+                logging.debug('Control message successfully read and parsed')
+                return control, value
+            else:
+                return None
         else:
             # No serial communication link. Return failure.
             logging.debug('Cannot read control message. '
                           'No connection established')
             return None
-
-    def write(self, control, value):
-        """Writes the given control and value in the standard core-to-stomp
-           protocol.
-
-        Arguments:
-            control: The control which to write to.
-            value: The new value of this control.
-        Returns:
-            True on success, False if otherwise.
-        """
-        if self.__is_connected:
-            logging.debug('Begin control message write')
-            out_data = ControlProtocol.build_outgoing(control, value)
-            self.__serial.write(out_data)
-            logging.debug('Control message successfully built and written')
-            return True
-        else:
-            # No serial communication link. Return failure.
-            logging.debug('Cannot write control message. '
-                          'No connection established')
-            return False
-
 
 # Main function for class file
 # (should remain relatively unused outside of small-scale class testing)
