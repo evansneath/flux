@@ -1,10 +1,7 @@
 #!/usr/bin/python2.7
 
-"""effects.py
-    These are the Flux effects classes designed to communicate
-    via serial chatter between the warp and stomp modules. This
-    does so through the pySerial library. The effects heirarchy
-    and their traits are also organized in this class.
+"""effect.py
+    This module contains and organizes the Flux effects.
 """
 
 # Library imports
@@ -14,8 +11,7 @@ class Trait(object):
     """Trait class
 
     A trait object stores a single character trait relating
-    to a parent effect. This trait has a name as well
-    as a trait modifying control located on the Stomp system.
+    to a parent effect.
 
     Attributes:
         parent: The trait's parent effect
@@ -24,18 +20,15 @@ class Trait(object):
     """
 
     # Initialization function
-    def __init__(self, parent, name, control):
+    def __init__(self, parent, name):
         """Initialization function for a new trait object.
 
         Arguments:
             parent: The trait's parent effect.
             name: The name of the trait.
-            control: The device on the hardware to control.
         """
-
         self.__parent = parent
         self.__name = name
-        self.__control = control
 
     # Private functions
     def __get_parent(self):
@@ -51,6 +44,28 @@ class Trait(object):
         """Setter for the trait name"""
         self.__name = new_name
 
+    # Property declarations
+    parent = property(fget=__get_parent, 
+                      doc='Gets the parent effect name')
+    name = property(fget=__get_name, fset=__set_name,
+                    doc='Gets or sets the trait name')
+
+class ControlTrait(Trait):
+    """ControlTrait class
+    
+    Extends the Trait class to add a trait manipulating control
+    """
+    def __init__(self, parent, name, control):
+        """Initialization function for a new ControlTrait object.
+        
+        Arguments:
+            parent: The trait's parent effect
+            name: The string formatted name of the trait
+            control: The controlling hardware input    
+        """
+        super(ControlTrait, self).__init__(parent, name)
+        self.__control = control
+    
     def __get_control(self):
         """Getter for the trait control"""
         return self.__control
@@ -59,11 +74,6 @@ class Trait(object):
         """Setter for the trait control"""
         self.__control = new_control
 
-    # Property declarations
-    parent = property(fget=__get_parent, 
-                      doc='Gets the parent effect name')
-    name = property(fget=__get_name, fset=__set_name,
-                    doc='Gets or sets the trait name')
     control = property(fget=__get_control, fset=__set_control,
                        doc='Gets or sets the active trait control')
 
@@ -127,10 +137,10 @@ class Effect(object):
         """Toggles the effect on or off depending on current state"""
         self.__is_active = not self.__is_active
 
-    def add_trait(self, name, control, value=0):
+    def add_trait(self, name):
         """Adds a new trait object to the effect's trait list"""
         try:
-            self.traits.append(Trait(self.__name, name, control))
+            self.traits.append(Trait(self.__name, name))
             logging.debug('Added new trait ''{0}'' to '
                           'effect ''{1}'''.format(name, self.__name))
             return True
@@ -139,7 +149,7 @@ class Effect(object):
                           'to effect ''{1}'''.format(name, self.__name))
             return False
 
-    def remove_trait(self, name):
+    def remove_trait_by_name(self, name):
         """Removes an existing trait object from the 
            effect's trait list
 
@@ -158,7 +168,7 @@ class Effect(object):
                           'in effect ''{1}'''.format(name, self.__name))
             return False
 
-    def find_trait(self, name):
+    def find_trait_by_name(self, name):
         """Search for a trait by name
 
         Arguments:
@@ -173,11 +183,11 @@ class Effect(object):
                 break
         return found
 
-class Core(object):
-    """Core class
+class EffectLibrary(object):
+    """EffectLibrary class
 
-    A core object's main priority to to contain the
-    list of effects.
+    The object's main priority to to contain and
+    manage the list of effects.
 
     Attributes:
         effect_list: A list of Flux effects.
@@ -185,12 +195,12 @@ class Core(object):
 
     # Initialization function
     def __init__(self):
-        """Begin core object definition"""
+        """Begin effect library object definition"""
         self.__effects = []
 
     # Private functions
     def __get_effects(self):
-        """Getter for the core list of effects"""
+        """Getter for the effect library list of effects"""
         return self.__effects
 
     # Property declarations
@@ -199,7 +209,7 @@ class Core(object):
 
     # Public functions
     def add_effect(self, name, is_active=False):
-        """Adds a new effect object to the core.
+        """Adds a new effect object to the effect library.
 
         Arguments:
             name: A name to give to the new effect. (default: None)
@@ -210,14 +220,14 @@ class Core(object):
         """
         try:
             self.__effects.append(Effect(name, is_active))
-            logging.debug('Added new effect ''{0}'' to core'.format(name))
+            logging.debug('Added new effect ''{0}'' to library'.format(name))
             return True
         except:
-            logging.debug('Cannot add effect ''{0}'' to core'.format(name))
+            logging.debug('Cannot add effect ''{0}'' to library'.format(name))
             return False
 
-    def remove_effect(self, name):
-        """Removes an existing effect object from the Core.
+    def remove_effect_by_name(self, name):
+        """Removes an existing effect object from the effect library.
 
         Arguments:
             name: The name of the effect to remove.
@@ -227,14 +237,14 @@ class Core(object):
         try:
             self.__effects.remove(find_effect(name))
             logging.debug('Removed effect ''{0}'' from '
-                          'core'.format(name))
+                          'library'.format(name))
             return True
         except:
             logging.debug('Cannot remove effect ''{0}''. Not found '
-                          'in core'.format(name))
+                          'in library'.format(name))
             return False
 
-    def find_effect(self, name):
+    def find_effect_by_name(self, name):
         """Search for an effect by name.
 
         Arguments:
@@ -249,10 +259,10 @@ class Core(object):
                 break
         return found
 
-    def print_effect_tree(self):
+    def display_tree(self):
         """Prints the full effects tree heirarchy in a
            very simply manner."""
-        print('-- Core object heirarchy --')
+        print('-- library object heirarchy --')
         if not self.__effects:
             print('<Empty>')
         for effect in self.__effects:

@@ -1,12 +1,11 @@
 #!/usr/bin/python2.7
 
-"""controls.py
+"""control.py
     This module contains all of the objects representing the Stomp onboard
     controls. This includes toggle switches, wah pedals, dials, etc.
 """
 
 # Library imports
-
 
 class Control(object):
     """Control class
@@ -18,16 +17,15 @@ class Control(object):
         name: The readable name of the control.
         identifier: The control's byte message identifier.
     """
-    def __init__(self, name, id):
+    def __init__(self, name, identifier):
         """Initialization function for a new control object
         
         Arguments:
             name: The readable name of the control.
-            id: The control's byte message identifier.
+            identifier: The control's byte message identifier.
         """
-        
         self.__name = name
-        self.__identifier = id
+        self.__identifier = identifier
     
     def __get_name(self):
         """Getter for the control name"""
@@ -48,7 +46,7 @@ class Control(object):
     name = property(fget=__get_name, fset=__set_name,
                     doc='Gets or sets the control name')
     identifier = property(fget=__get_identifier, fset=__set_identifier,
-                          doc='Gets or sets the control id')
+                          doc='Gets or sets the control identifier')
 
 class SwitchControl(Control):
     """SwitchControl class
@@ -58,7 +56,6 @@ class SwitchControl(Control):
     Attributes:
         is_active: Determines whether the switch is on or off.
     """
-    
     def __get_is_active(self):
         """Getter for the switch's current state"""
         return self.__is_active
@@ -78,7 +75,6 @@ class DialControl(Control):
     Attributes:
         percent: The percentage value of the dial (0=min, 100=max)
     """
-    
     def __get_percent(self):
         """Getter for the dial's current percentage value"""
         return self.__percent
@@ -93,7 +89,7 @@ class DialControl(Control):
 class WahControl(DialControl):
     """WahControl class
     
-    A subclass of dial control used to represent a wah control.
+    A subclass of dial control used to represent a wah pedal control.
     """
     pass
 

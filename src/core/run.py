@@ -2,31 +2,26 @@
 
 """run.py
     This module is the main running module for the Flux Core application.
-    The purpose of the module is to combine the Core object class along
-    with the Communicator class in order to run ChucK shreds based on the
-    incoming Stomp commands. Core may also issue some commands back to
-    Stomp. All commands should be included in the cmd_list function and
-    from there should act appropriately. The main function should loop
-    forever unless a shutdown sequence occurs.
+    The purpose of the module is to combine the Core object class along with
+    the Communicator class in order to run effects based on the incoming Stomp
+    commands. Core may also issue some commands back to Stomp.
 """
 
 # Library imports
-import os
 import sys
-import traceback
 import argparse
 import logging
 
 # Core library imports
-from effects import Core
+from effect import EffectLibrary
 from communicator import Communicator
 
 
-def main():
+def start_flux():
     """The primary, infinitely running module which handles and serves the
-       Arduino control requests as well as executing signal processing accordingly.
+       Arduino control requests as well as executing signal processing
+       accordingly.
     """
-
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='Begins Flux Core command reading and processing')
@@ -54,7 +49,7 @@ def main():
     # Initialize Core class object
     try:
         logging.debug('Creating Core object')
-        core = Core()
+        effect_lib = EffectLibrary()
         logging.debug('Core object created')
     except:
         logging.error('Fatal error upon Core object creation. Ending now')
@@ -63,7 +58,7 @@ def main():
     # Initialize Communicator class object
     try:
         logging.debug('Creating Communicator object')
-        comm = Communicator()
+        communicator = Communicator()
         logging.debug('Communicator object created')
     except:
         logging.error('Fatal error upon Communicator object creation. '
@@ -73,7 +68,7 @@ def main():
     # Begin Core loop initialization function
     try:
         logging.debug('Beginning initialization function')
-        init(core, comm)
+        init(effect_lib, communicator)
         logging.debug('Initialization complete')
     except:
         logging.error('Fatal error occured during system initialization. '
@@ -82,8 +77,8 @@ def main():
 
     # Begin serial command processing loop
     try:
-        logging.info('Now handling serial commands...')
-        loop(core, comm)
+        logging.info('Now handling user operations...')
+        loop(effect_lib, communicator)
     except:
         logging.error('Fatal error occured during serial communications loop. '
                       'Ending now')
@@ -92,13 +87,13 @@ def main():
     logging.info('Command processing terminated gracefully. Goodbye')
     return 0
 
-def init(core_obj, comm_obj):
+def init(effect_lib, communicator):
     """Initialization function for the main loop"""
     ready = False
 
     # Get core_obj pickled data from previous sessions
     try:
-        logging.debug('Populating Core with saved data')
+        logging.debug('Populating effect library with saved data')
         #TODO(evan): populate core object with pickled data
         logging.debug('Core object persistant data successfully populated')
     except:
@@ -109,7 +104,7 @@ def init(core_obj, comm_obj):
     # Establish connection with Arduino device over serial
     try:
         logging.debug('Establishing connection with Arduino')
-        comm_obj.connect()
+        communicator.connect()
         logging.debug('Connection successfully established')
     except:
         logging.error('Could not connect to Arduino device. '
@@ -118,25 +113,10 @@ def init(core_obj, comm_obj):
     
     return
 
-def loop(core_obj, comm_obj):
-    """The continuous, main loop which serves Stomp and
-       controls the execution of ChucK shreds.
-    """
-    #TODO(evan):
-    # 1. Populate all possible control sequences from arduino
-    # 2. Determine how the program will react to the commands
-    while 1:
-        # Read next message
-        logging.debug('Waiting on new incoming control message')
-        #control, value = comm_obj.read()
-        # (comm_reader function)
-
-        logging.debug('Control message received. Reacting to message')
-        # Act on message contents (reactor function)
-        #decision(control, value)
-
+def loop(effect_lib, communicator):
+    while True:
         return # **temporary**
 
 # This module will always be main unless unit testing is taking place.
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(start_flux())
