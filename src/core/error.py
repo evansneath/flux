@@ -5,7 +5,8 @@
     and exceptions present within the Flux project
 """
 
-# Python library imports
+# Library imports
+
 
 class Error(Exception):
     """Base class for exceptions within the Core system"""

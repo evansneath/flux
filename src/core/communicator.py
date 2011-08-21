@@ -7,7 +7,7 @@
     communcation that is read and then parses it into usable commands.
 """
 
-# Python library imports
+# Library imports
 import serial
 import logging
 

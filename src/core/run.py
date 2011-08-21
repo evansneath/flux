@@ -10,7 +10,7 @@
     forever unless a shutdown sequence occurs.
 """
 
-# Python library imports
+# Library imports
 import os
 import sys
 import traceback
@@ -18,7 +18,7 @@ import argparse
 import logging
 
 # Core library imports
-from core import Core
+from effects import Core
 from communicator import Communicator
 
 
