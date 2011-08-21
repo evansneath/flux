@@ -1,4 +1,4 @@
-Flux 0.1
+Flux v0.1 (pre-alpha)
 
 The Flux project is a dynamic, real-time system for the emulation of various
 sources of audio effects environments.
@@ -8,8 +8,6 @@ More details about the Flux project can be read on our wiki:
 
 To run the Flux main loop, simply execute the following code in src/core:
     python run.py
-
-This project is currently in its pre-alpha phases.
 
 Copyright (c) 2011 Evan Sneath
 

@@ -1,6 +1,6 @@
 #!/usr/bin/python2.7
 
-"""run.py
+"""main.py
     This module is the main running module for the Flux Core application.
     The purpose of the module is to combine the Core object class along with
     the Communicator class in order to run effects based on the incoming Stomp
@@ -11,13 +11,10 @@
 import sys
 import argparse
 import logging
-
-# Core library imports
 from effect import EffectLibrary
 from communicator import Communicator
 
-
-def start_flux():
+def main():
     """The primary, infinitely running module which handles and serves the
        Arduino control requests as well as executing signal processing
        accordingly.
@@ -46,26 +43,26 @@ def start_flux():
     except:
         return 1
 
-    # Initialize Core class object
+    # Initialize EffectLibrary class object
     try:
-        logging.debug('Creating Core object')
+        logging.debug('Creating effect library')
         effect_lib = EffectLibrary()
-        logging.debug('Core object created')
+        logging.debug('Effect library created')
     except:
-        logging.error('Fatal error upon Core object creation. Ending now')
+        logging.error('Fatal error upon effect library creation. Ending now')
         return 1
 
     # Initialize Communicator class object
     try:
-        logging.debug('Creating Communicator object')
+        logging.debug('Creating communicator object')
         communicator = Communicator()
         logging.debug('Communicator object created')
     except:
-        logging.error('Fatal error upon Communicator object creation. '
+        logging.error('Fatal error upon communicator object creation. '
                       'Ending now')
         return 1
 
-    # Begin Core loop initialization function
+    # Begin initialization function
     try:
         logging.debug('Beginning initialization function')
         init(effect_lib, communicator)
@@ -110,7 +107,7 @@ def init(effect_lib, communicator):
         logging.error('Could not connect to Arduino device. '
                       'None found on host system. Ending now')
         raise
-    
+
     return
 
 def loop(effect_lib, communicator):
@@ -119,4 +116,4 @@ def loop(effect_lib, communicator):
 
 # This module will always be main unless unit testing is taking place.
 if __name__ == '__main__':
-    sys.exit(start_flux())
+    sys.exit(main())
