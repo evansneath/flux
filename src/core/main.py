@@ -1,10 +1,11 @@
 #!/usr/bin/python2.7
 
 """main.py
-    This module is the main running module for the Flux Core application.
-    The purpose of the module is to combine the Core object class along with
-    the Communicator class in order to run effects based on the incoming Stomp
-    commands. Core may also issue some commands back to Stomp.
+
+This module is the main running module for the Flux Core application.
+The purpose of the module is to combine the Core object class along with
+the Communicator class in order to run effects based on the incoming Stomp
+commands. Core may also issue some commands back to Stomp.
 """
 
 # Library imports

@@ -1,8 +1,9 @@
 #!/usr/bin/python2.7
 
 """error.py
-    The error.py module defines all of the error codes
-    and exceptions present within the Flux project
+
+The error.py module defines all of the error codes
+and exceptions present within the Flux project
 """
 
 # Library imports

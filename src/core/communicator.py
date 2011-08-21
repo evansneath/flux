@@ -1,10 +1,11 @@
 #!/usr/bin/python2.7
 
 """communicator.py
-    This is the Flux Stomp to Core serial communication manager.
-    Communicator also implements the Message class object contained
-    in this module. The ControlProtocol class holds the byte-stream 
-    communcation that is read and then parses it into usable commands.
+
+This is the Flux Stomp to Core serial communication manager.
+Communicator also implements the Message class object contained
+in this module. The ControlProtocol class holds the byte-stream 
+communcation that is read and then parses it into usable commands.
 """
 
 # Library imports

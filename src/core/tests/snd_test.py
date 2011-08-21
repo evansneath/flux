@@ -1,7 +1,8 @@
 #!/usr/bin/python2.7
 
 """snd_test.py
-    This is a quick module to test the I/O capabilities of pySndObj
+
+This is a quick module to test the I/O capabilities of pySndObj
 """
 
 # Library imports

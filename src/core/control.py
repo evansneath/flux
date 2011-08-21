@@ -1,8 +1,9 @@
 #!/usr/bin/python2.7
 
 """control.py
-    This module contains all of the objects representing the Stomp onboard
-    controls. This includes toggle switches, wah pedals, dials, etc.
+
+This module contains all of the objects representing the Stomp onboard
+controls. This includes toggle switches, wah pedals, dials, etc.
 """
 
 # Library imports
@@ -31,17 +32,17 @@ class Control(object):
         """Getter for the control name"""
         return self.__name
 
-    def __set_name(self, name):
+    def __set_name(self, new_name):
         """Setter for the control name"""
-        self.__name = name
+        self.__name = new_name
     
     def __get_identifier(self):
-        """Getter for the control id"""
+        """Getter for the control identifier"""
         return self.__identifier
     
-    def __set_identifier(self, id):
-        """Setter for the control id"""
-        self.__identifier = id
+    def __set_identifier(self, new_identifier):
+        """Setter for the control identifier"""
+        self.__identifier = new_identifier
 
     name = property(fget=__get_name, fset=__set_name,
                     doc='Gets or sets the control name')
@@ -60,9 +61,9 @@ class SwitchControl(Control):
         """Getter for the switch's current state"""
         return self.__is_active
     
-    def __set_is_active(self, is_active):
+    def __set_is_active(self, new_is_active):
         """Setter for the switch's current state"""
-        self.__is_active = is_active
+        self.__is_active = new_is_active
     
     is_active = property(fget=__get_is_active, fset=__set_is_active,
                          doc='Gets or sets the switch current active state')
@@ -79,9 +80,9 @@ class DialControl(Control):
         """Getter for the dial's current percentage value"""
         return self.__percent
     
-    def __set_percent(self, percent):
+    def __set_percent(self, new_percent):
         """Setter for the dial's current percentage value"""
-        self.__percent = percent
+        self.__percent = new_percent
     
     percent = property(fget=__get_percent, fset=__set_percent,
                        doc='Gets or sets the dial current percentage')
@@ -96,7 +97,7 @@ class WahControl(DialControl):
 # Main function for class file
 # (should remain relatively unused outside of small-scale class testing)
 def main():
-    print('hello, controls')
+    print('hello, control')
     return
 
 if __name__ == '__main__':
