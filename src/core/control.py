@@ -6,8 +6,6 @@ This module contains all of the objects representing the Stomp onboard
 controls. This includes toggle switches, wah pedals, dials, etc.
 """
 
-# Library imports
-
 class Control(object):
     """Control class
     

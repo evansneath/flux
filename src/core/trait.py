@@ -1,3 +1,4 @@
+#!/usr/bin/python2.7
 
 """trait.py
 
@@ -17,8 +18,6 @@ class Trait(object):
         parent: The trait's parent effect
         name: The string formatted name of the trait
     """
-
-    # Initialization function
     def __init__(self, parent, name):
         """Initialization function for a new trait object.
 
@@ -29,7 +28,6 @@ class Trait(object):
         self.__parent = parent
         self.__name = name
 
-    # Private functions
     def __get_parent(self):
         """Getter for the trait parent. Parent value may
            not be changed as this trait is owned completely"""
@@ -43,7 +41,6 @@ class Trait(object):
         """Setter for the trait name"""
         self.__name = new_name
 
-    # Property declarations
     parent = property(fget=__get_parent, 
                       doc='Gets the parent effect name')
     name = property(fget=__get_name, fset=__set_name,

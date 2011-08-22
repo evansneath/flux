@@ -13,7 +13,7 @@ import sys
 import argparse
 import logging
 from effect import EffectLibrary
-from communicator import Communicator
+from protocol import SerialProtocol
 
 def main():
     """The primary, infinitely running module which handles and serves the
@@ -56,7 +56,7 @@ def main():
     # Initialize Communicator class object
     try:
         logging.debug('Creating communicator object')
-        communicator = Communicator()
+        serial = SerialProtocol()
         logging.debug('Communicator object created')
     except:
         logging.error('Fatal error upon communicator object creation. '
@@ -66,7 +66,7 @@ def main():
     # Begin initialization function
     try:
         logging.debug('Beginning initialization function')
-        init(effect_lib, communicator)
+        init(effect_lib, serial)
         logging.debug('Initialization complete')
     except:
         logging.error('Fatal error occured during system initialization. '
@@ -76,7 +76,7 @@ def main():
     # Begin serial command processing loop
     try:
         logging.info('Now handling user operations...')
-        loop(effect_lib, communicator)
+        loop(effect_lib, serial)
     except:
         logging.error('Fatal error occured during serial communications loop. '
                       'Ending now')
@@ -85,7 +85,7 @@ def main():
     logging.info('Command processing terminated gracefully. Goodbye')
     return 0
 
-def init(effect_lib, communicator):
+def init(effect_lib, serial):
     """Initialization function for the main loop"""
     ready = False
 
@@ -102,7 +102,7 @@ def init(effect_lib, communicator):
     # Establish connection with Arduino device over serial
     try:
         logging.debug('Establishing connection with Arduino')
-        communicator.connect()
+        serial.connect()
         logging.debug('Connection successfully established')
     except:
         logging.error('Could not connect to Arduino device. '
@@ -111,7 +111,7 @@ def init(effect_lib, communicator):
 
     return
 
-def loop(effect_lib, communicator):
+def loop(effect_lib, serial):
     while True:
         return # **temporary**
 

@@ -1,56 +1,27 @@
 #!/usr/bin/python2.7
 
-"""communicator.py
+"""protocol.py
 
 This is the Flux Stomp to Core serial communication manager.
-Communicator also implements the Message class object contained
-in this module. The ControlProtocol class holds the byte-stream 
-communcation that is read and then parses it into usable commands.
+The SerialProtocol class holds the byte-stream communcation
+that is read and then parses it into usable commands.
 """
 
 # Library imports
 import serial
 import logging
 
-class ControlProtocol:
-    """ControlProtocol class
-
-    Provides standard serial Stomp-to-Core message protocol
-    functions to parse from raw data or assemble a new message.
-    """
-    
-    # Class constants
-    IS_MODIFIED_MESSAGE_SIZE = 1
-    CONTROL_MESSAGE_SIZE = 5
-
-    # Public functions
-    def parse(raw_bytes):
-        """Parses a string of raw data read from the Stomp device into an
-           active control and its value.
-           
-        Arguments:
-            raw_bytes: A string of data to parse.
-        Returns:
-            control: The modified control's identifier.
-            value: The modified control's new value.
-        """
-        #first byte = control identifier
-        #next 4 bytes = value
-        return control, value
-    
-class Communicator:
-    """Communicator class
+class SerialProtocol(object):
+    """SerialProtocol class
 
     A communication bridge class for parsing and initiating talk
     between the Arduino device running Stomp and the Core classes.
 
     Attributes:
         device: The device port which to connect.
-        baudrate: The bits per second transfer rate of the serial connection.
+        baudrate: The bits per second transfe r rate of the serial connection.
         is_connected: Displays current connection status.
     """
-
-    # Initialization function
     def __init__(self, device=None, baudrate=9600):
         """Begin Communicator definition"""
         self.__device = device
@@ -58,7 +29,10 @@ class Communicator:
         self.__is_connected = False
         self.__serial = None
 
-    # Private functions
+    _IS_MODIFIED_SIZE = 1
+    _CONTROL_SIZE = 2
+    _VALUE_SIZE = 8
+
     def __get_device(self):
         """Getter for the Communicator device property"""
         return self.__device
@@ -79,7 +53,6 @@ class Communicator:
         """Getter for the Communicator is_connected property"""
         return self.__is_connected
 
-    # Property declarations
     device = property(fget=__get_device, fset=__set_device,
                       doc='Gets or sets the serial connection device')
     baudrate = property(fget=__get_baudrate, fset=__set_baudrate,
@@ -87,7 +60,6 @@ class Communicator:
     is_connected = property(fget=__get_is_connected,
                             doc='Gets the serial connection status')
 
-    # Public functions
     def connect(self):
         """Creates a serial connection between the object and the device
            port specified with the chosen baudrate.
@@ -135,21 +107,23 @@ class Communicator:
            and a 'value' segment. Each being 8 Bytes.
 
         Returns:
-            Control and value objects. None if no connection is present.
+            control: Incoming message control code.
+            value: Incoming message control updated value.
         """
         if self.__is_connected:
             logging.debug('Begin control message read')
             
             # Read flag indicating control value change
-            in_data = read(ControlProtocol.IS_MODIFIED_MESSAGE_SIZE)
+            in_data = self.__serial.read(_IS_MODIFIED_SIZE)
             
             if in_data == True:
-                logging.debug('Control modified. Parsing new value')
+                logging.debug('Control modified. Reading new value')
                 
-                in_data = read(ControlProtocol.CONTROL_MESSAGE_SIZE)
-                control, value = ControlProtocol.parse_incoming(in_data)
+                control = self.__serial.read(_CONTROL_SIZE)
+                value = self.__serial.read(_VALUE_SIZE)
                 
-                logging.debug('Control message successfully read and parsed')
+                logging.debug('New control and value successfully read')
+                
                 return control, value
             else:
                 return None
