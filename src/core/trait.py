@@ -67,7 +67,7 @@ class Gain(Trait):
             level: The active level of the gain. [dB]
             multiplier: The multiplication factor of the gain. [-]
         """
-        super(StaticGain, self).__init__(parent, name)
+        super(Gain, self).__init__(parent, name)
         self.__level = level
         self.__multiplier = multiplier
         self.__gain = sndobj.Gain()
