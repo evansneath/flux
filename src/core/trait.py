@@ -25,6 +25,7 @@ class Trait(object):
             parent: The trait's parent effect.
             name: The name of the trait.
         """
+        super(Trait, self).__init__()
         self.__parent = parent
         self.__name = name
 

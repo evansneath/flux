@@ -23,6 +23,7 @@ class Control(object):
             name: The readable name of the control.
             identifier: The control's byte message identifier.
         """
+        super(Control, self).__init__()
         self.__name = name
         self.__identifier = identifier
     

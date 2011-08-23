@@ -4,7 +4,7 @@
 
 This module is the main running module for the Flux Core application.
 The purpose of the module is to combine the Core object class along with
-the Communicator class in order to run effects based on the incoming Stomp
+the SerialProtocol class in order to run effects based on the incoming Stomp
 commands. Core may also issue some commands back to Stomp.
 """
 
@@ -46,37 +46,28 @@ def main():
 
     # Initialize EffectLibrary class object
     try:
-        logging.debug('Creating effect library')
+        logging.debug('Starting effect library')
         effect_lib = EffectLibrary()
-        logging.debug('Effect library created')
+        logging.debug('Effect library started successfully')
     except:
         logging.error('Fatal error upon effect library creation. Ending now')
         return 1
 
-    # Initialize Communicator class object
+    # Initialize SerialProtocol class object
     try:
-        logging.debug('Creating communicator object')
-        serial = SerialProtocol()
-        logging.debug('Communicator object created')
+        logging.debug('Starting serial communication')
+        serial = SerialProtocol('/dev/tty.usbserial', 9600)
+        logging.debug('Serial communication started successfully')
     except:
-        logging.error('Fatal error upon communicator object creation. '
-                      'Ending now')
-        return 1
-
-    # Begin initialization function
-    try:
-        logging.debug('Beginning initialization function')
-        init(effect_lib, serial)
-        logging.debug('Initialization complete')
-    except:
-        logging.error('Fatal error occured during system initialization. '
+        logging.error('Fatal error upon serial communication initialization. '
                       'Ending now')
         return 1
 
     # Begin serial command processing loop
     try:
         logging.info('Now handling user operations...')
-        loop(effect_lib, serial)
+        while True:
+            return # temporary
     except:
         logging.error('Fatal error occured during serial communications loop. '
                       'Ending now')
@@ -84,36 +75,6 @@ def main():
 
     logging.info('Command processing terminated gracefully. Goodbye')
     return 0
-
-def init(effect_lib, serial):
-    """Initialization function for the main loop"""
-    ready = False
-
-    # Get core_obj pickled data from previous sessions
-    try:
-        logging.debug('Populating effect library with saved data')
-        #TODO(evan): populate core object with pickled data
-        logging.debug('Core object persistant data successfully populated')
-    except:
-        # This is not a critical error, but send a warning
-        logging.warning('No existing data found. Data will need to be '
-                        'inputted manually')
-
-    # Establish connection with Arduino device over serial
-    try:
-        logging.debug('Establishing connection with Arduino')
-        serial.connect()
-        logging.debug('Connection successfully established')
-    except:
-        logging.error('Could not connect to Arduino device. '
-                      'None found on host system. Ending now')
-        raise
-
-    return
-
-def loop(effect_lib, serial):
-    while True:
-        return # **temporary**
 
 # This module will always be main unless unit testing is taking place.
 if __name__ == '__main__':

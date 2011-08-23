@@ -28,6 +28,7 @@ class Effect(object):
             name: The name to give the effect.
             is_active: Whether the effect is active from initialization.
         """
+        super(Effect, self).__init__()
         self.__name = name
         self.__is_active = is_active
         self.__trait_list = []
@@ -122,6 +123,7 @@ class EffectLibrary(object):
     """
     def __init__(self):
         """Initialize effect library object"""
+        super(EffectLibrary, self).__init__()
         self.__effect_list = []
 
     def __get_effect_list(self):
