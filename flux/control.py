@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python
 
 """control.py
 
@@ -14,82 +14,91 @@ class Control(object):
     
     Attributes:
         name: The readable name of the control.
-        identifier: The control's byte message identifier.
+        id: The control's byte message identifier.
     """
-    def __init__(self, name, identifier):
-        """Initialization function for a new control object
+    def __init__(self, name, id):
+        """Initialization function for a new control object.
         
         Arguments:
             name: The readable name of the control.
-            identifier: The control's byte message identifier.
+            id: The control's byte message identifier.
         """
         super(Control, self).__init__()
         self.__name = name
-        self.__identifier = identifier
+        self.__id = id
     
     def __get_name(self):
-        """Getter for the control name"""
+        """Getter for the control name."""
         return self.__name
 
     def __set_name(self, new_name):
-        """Setter for the control name"""
+        """Setter for the control name."""
         self.__name = new_name
     
-    def __get_identifier(self):
-        """Getter for the control identifier"""
-        return self.__identifier
+    def __get_id(self):
+        """Getter for the control identifier."""
+        return self.__id
     
-    def __set_identifier(self, new_identifier):
-        """Setter for the control identifier"""
-        self.__identifier = new_identifier
+    def __set_id(self, new_id):
+        """Setter for the control identifier."""
+        self.__id = new_id
 
     name = property(fget=__get_name, fset=__set_name,
-                    doc='Gets or sets the control name')
-    identifier = property(fget=__get_identifier, fset=__set_identifier,
-                          doc='Gets or sets the control identifier')
+                    doc='Gets or sets the control name.')
+    identifier = property(fget=__get_id, fset=__set_id,
+                          doc='Gets or sets the control identifier.')
 
-class SwitchControl(Control):
-    """SwitchControl class
+class Switch(Control):
+    """Switch class
     
     A subclass of control used to represent a switch control.
     
     Attributes:
-        is_active: Determines whether the switch is on or off.
+        name: The readable name of the switch control.
+        id: The switch control's byte message identifier.
+        is_active: Determines whether the switch control is on or off.
     """
     def __get_is_active(self):
-        """Getter for the switch's current state"""
+        """Getter for the switch control's current state."""
         return self.__is_active
     
     def __set_is_active(self, new_is_active):
-        """Setter for the switch's current state"""
+        """Setter for the switch control's current state."""
         self.__is_active = new_is_active
     
     is_active = property(fget=__get_is_active, fset=__set_is_active,
-                         doc='Gets or sets the switch current active state')
+                         doc='Gets or sets the switch current active state.')
 
-class DialControl(Control):
-    """DialControl class
+class Dial(Control):
+    """Dial class
     
     A subclass of control used to represent a dial control.
     
     Attributes:
-        percent: The percentage value of the dial (0=min, 100=max)
+        name: The readable name of the dial control.
+        id: The dial control's byte message identifier.
+        percent: The percentage value of the dial. (0=min, 100=max)
     """
     def __get_percent(self):
-        """Getter for the dial's current percentage value"""
+        """Getter for the dial control's current percentage value."""
         return self.__percent
     
     def __set_percent(self, new_percent):
-        """Setter for the dial's current percentage value"""
+        """Setter for the dial control's current percentage value."""
         self.__percent = new_percent
     
     percent = property(fget=__get_percent, fset=__set_percent,
                        doc='Gets or sets the dial current percentage')
 
-class WahControl(DialControl):
-    """WahControl class
+class Wah(Dial):
+    """Wah class
     
     A subclass of dial control used to represent a wah pedal control.
+    
+    Attributes:
+        name: The readable name of the wah control.
+        id: The wah control's byte message identifier.
+        percent: The percentage value of the wah. (0=min, 100=max)
     """
     pass
 

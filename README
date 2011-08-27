@@ -1,10 +1,15 @@
-Flux v0.1 (pre-alpha)
+Flux version 0.1a
 
-The Flux project is a dynamic, real-time system for the emulation of various
-sources of audio effects environments.
-
-More details about the Flux project can be read on our wiki:
-    https://github.com/evansneath/flux/wiki
+A dynamic, real-time system for the emulation of various sources of audio effects environments.
 
 To run the Flux main loop, simply execute the following code in src/core:
     python main.py
+    
+Contributers:
+    Evan Sneath (https://github.com/evansneath)
+
+More project documentation available on the project wiki:
+    https://github.com/evansneath/flux/wiki
+
+This software licensed under the Open Software License version 3.0:
+    http://www.opensource.org/licenses/OSL-3.0

@@ -1,11 +1,11 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python
 
 """main.py
 
-This module is the main running module for the Flux Core application.
-The purpose of the module is to combine the Core object class along with
+This module is the main running module for the Flux application.
+The purpose of the module is to bind the EffectLibrary object class along with
 the SerialProtocol class in order to run effects based on the incoming Stomp
-commands. Core may also issue some commands back to Stomp.
+commands.
 """
 
 # Library imports
@@ -21,11 +21,13 @@ def main():
        accordingly.
     """
     # Parse command line arguments
-    parser = argparse.ArgumentParser(
-        description='Begins Flux Core command reading and processing')
-    parser.add_argument('--debug', action='store_true',
+    parser = argparse.ArgumentParser(description='Begins Flux Core command reading and processing')
+    parser.add_argument('--debug',
+                        action='store_true',
                         help='displays debug information in log file')
-    parser.add_argument('--log', metavar='FILENAME', action='store',
+    parser.add_argument('--log',
+                        metavar='FILENAME',
+                        action='store',
                         default=None,
                         help='specifies filename of the core log file')
     args = parser.parse_args()
@@ -40,34 +42,40 @@ def main():
         logging.basicConfig(format='%(levelname)s:%(message)s',
                             filename=args.log, filemode='w', 
                             level=log_level)
-        logging.info('Core reactor started')
     except:
         return 1
+    
+    logging.info('Log started successfully')
 
     # Initialize EffectLibrary class object
+    logging.debug('Starting effect library')
+    
     try:
-        logging.debug('Starting effect library')
         effect_lib = EffectLibrary()
-        logging.debug('Effect library started successfully')
     except:
         logging.error('Fatal error upon effect library creation. Ending now')
         return 1
+    
+    logging.debug('Effect library started successfully')
 
     # Initialize SerialProtocol class object
+    logging.debug('Starting serial communication')
+    
     try:
-        logging.debug('Starting serial communication')
         serial = SerialProtocol('/dev/tty.usbserial', 9600)
-        logging.debug('Serial communication started successfully')
     except:
         logging.error('Fatal error upon serial communication initialization. '
                       'Ending now')
         return 1
+    
+    logging.debug('Serial communication started successfully')
 
     # Begin serial command processing loop
+    logging.info('Now handling user operations...')
+    
     try:
-        logging.info('Now handling user operations...')
-        while True:
-            return # temporary
+        # begin processing loop
+        pass
     except:
         logging.error('Fatal error occured during serial communications loop. '
                       'Ending now')

@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python
 
 """effect.py
 
@@ -14,7 +14,7 @@ class Effect(object):
     An effect object stores all details relating to a
     single board effect. This includes its name, list
     of effect traits, and whether it is active or
-    not. This allows for easy access to effects data
+    not. This allows for easy access to effects data.
 
     Attributes:
         name: The string formatted name of the effect.
@@ -22,7 +22,7 @@ class Effect(object):
         trait_list: A list of effect traits.
     """
     def __init__(self, name, is_active=False):
-        """Initialization function for a new effect object
+        """Initialization function for a new effect object.
 
         Arguments:
             name: The name to give the effect.
@@ -35,40 +35,40 @@ class Effect(object):
 
     # Private functions
     def __get_name(self):
-        """Getter for the effect name property"""
+        """Getter for the effect name property."""
         return self.__name
 
     def __set_name(self, new_name):
-        """Setter for the effect name property"""
+        """Setter for the effect name property."""
         self.__name = new_name
 
     def __get_is_active(self):
-        """Getter for the effect is_active property"""
+        """Getter for the effect is_active property."""
         return self.__is_active
 
     def __set_is_active(self, new_is_active):
-        """Setter for the effect is_active property"""
+        """Setter for the effect is_active property."""
         self.__is_active = new_is_active
 
     def __get_trait_list(self):
-        """Getter for the effect list of traits"""
+        """Getter for the effect list of traits."""
         return self.__traits
 
     # Property declarations
     name = property(fget=__get_name, fset=__set_name,
-                    doc='Gets or sets the effect name')
+                    doc='Gets or sets the effect name.')
     is_active = property(fget=__get_is_active, fset=__set_is_active,
-                         doc='Gets or sets the active state of the effect')
+                         doc='Gets or sets the active state of the effect.')
     trait_list = property(fget=__get_trait_list, 
-                          doc='Gets the list of traits')
+                          doc='Gets the list of traits.')
 
     # Public functions
     def toggle(self):
-        """Toggles the effect on or off depending on current state"""
+        """Toggles the effect on or off depending on current state."""
         self.__is_active = not self.__is_active
 
     def add_trait(self, name):
-        """Adds a new trait object to the effect's trait list"""
+        """Adds a new trait object to the effect's trait list."""
         try:
             self.trait_list.append(Trait(self.__name, name))
             logging.debug('Added new trait ''{0}'' to '
@@ -81,7 +81,7 @@ class Effect(object):
 
     def remove_trait_by_name(self, name):
         """Removes an existing trait object from the 
-           effect's trait list
+           effect's trait list.
 
         Arguments:
             name: The name of the trait to remove.
@@ -99,7 +99,7 @@ class Effect(object):
             return False
 
     def find_trait_by_name(self, name):
-        """Search for a trait by name
+        """Search for a trait by name.
 
         Arguments:
             name: The name of the trait to search for.
@@ -122,12 +122,12 @@ class EffectLibrary(object):
         effect_list: A list of all effects.
     """
     def __init__(self):
-        """Initialize effect library object"""
+        """Initialize effect library object."""
         super(EffectLibrary, self).__init__()
         self.__effect_list = []
 
     def __get_effect_list(self):
-        """Getter for the effect library list of effects"""
+        """Getter for the effect library list of effects."""
         return self.__effects
 
     effect_list = property(fget=__get_effect_list,
