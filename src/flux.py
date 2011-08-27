@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""main.py
+"""flux.py
 
 This module is the main running module for the Flux application.
 The purpose of the module is to bind the EffectLibrary object class along with
@@ -13,7 +13,6 @@ import sys
 import argparse
 import logging
 from effect import EffectLibrary
-from protocol import SerialProtocol
 
 def main():
     """The primary, infinitely running module which handles and serves the
@@ -21,15 +20,19 @@ def main():
        accordingly.
     """
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Begins Flux Core command reading and processing')
+    parser = argparse.ArgumentParser(
+        description='Begins Flux Core command reading and processing.')
+    parser.add_argument('--stomp',
+                        action='store_true',
+                        help='Activate if Stomp subsystem is available.')
     parser.add_argument('--debug',
                         action='store_true',
-                        help='displays debug information in log file')
+                        help='Displays debug information in log file.')
     parser.add_argument('--log',
                         metavar='FILENAME',
                         action='store',
                         default=None,
-                        help='specifies filename of the core log file')
+                        help='Specifies filename of the core log file.')
     args = parser.parse_args()
 
     if args.debug:
@@ -45,43 +48,45 @@ def main():
     except:
         return 1
     
-    logging.info('Log started successfully')
+    logging.info('Log started successfully.')
 
     # Initialize EffectLibrary class object
-    logging.debug('Starting effect library')
+    logging.debug('Starting effect library.')
     
     try:
         effect_lib = EffectLibrary()
     except:
-        logging.error('Fatal error upon effect library creation. Ending now')
+        logging.error('Fatal error upon effect library creation. Ending now.')
         return 1
     
-    logging.debug('Effect library started successfully')
+    logging.debug('Effect library started successfully.')
 
-    # Initialize SerialProtocol class object
-    logging.debug('Starting serial communication')
-    
-    try:
-        serial = SerialProtocol('/dev/tty.usbserial', 9600)
-    except:
-        logging.error('Fatal error upon serial communication initialization. '
-                      'Ending now')
-        return 1
-    
-    logging.debug('Serial communication started successfully')
+    if args.stomp:
+        from protocol import SerialProtocol 
+        
+        # Initialize SerialProtocol class object
+        logging.debug('Starting serial communication.')
+        
+        try:
+            serial = SerialProtocol('/dev/tty.usbserial', 9600)
+        except:
+            logging.error('Fatal error upon serial communication '
+                          'initialization. Ending now.')
+            return 1
+        
+        logging.debug('Serial communication started successfully.')
 
-    # Begin serial command processing loop
+    # Begin processing loop
     logging.info('Now handling user operations...')
     
     try:
-        # begin processing loop
         pass
     except:
-        logging.error('Fatal error occured during serial communications loop. '
-                      'Ending now')
+        logging.error('Fatal error occured during processing loop. '
+                      'Ending now.')
         return 1
 
-    logging.info('Command processing terminated gracefully. Goodbye')
+    logging.info('Processing terminated gracefully. Goodbye.')
     return 0
 
 # This module will always be main unless unit testing is taking place.

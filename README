@@ -2,8 +2,8 @@ Flux version 0.1a
 
 A dynamic, real-time system for the emulation of various sources of audio effects environments.
 
-To run the Flux main loop, simply execute the following code in src/core:
-    python main.py
+To run the Flux processing, simply execute the following code in src/:
+    python flux.py
     
 Contributers:
     Evan Sneath (https://github.com/evansneath)
