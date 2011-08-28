@@ -21,7 +21,7 @@ def main():
     # Setup thread object
     thread = sndobj.SndThread()
     
-    thread.AddObj(in_signal, sndobj.SNDIO_IN) 
+    thread.AddObj(in_signal, sndobj.SNDIO_IN)
     thread.AddObj(out_signal, sndobj.SNDIO_OUT)
     thread.AddObj(snd)
     

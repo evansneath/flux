@@ -1,6 +1,7 @@
 Flux version 0.1a
 
-A dynamic, real-time system for the emulation of various sources of audio effects environments.
+A dynamic, real-time system for the emulation of various sources of audio
+effects environments.
 
 To run the Flux processing, simply execute the following code in src/:
     python flux.py

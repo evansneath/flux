@@ -2,7 +2,7 @@
 
 """control.py
 
-This module contains all of the objects representing the Stomp onboard
+This module defines all of the objects representing the Stomp onboard
 controls. This includes toggle switches, wah pedals, dials, etc.
 """
 
