@@ -7,46 +7,25 @@ This module defines the Effect class and its subclass types.
 
 # Library imports
 import sndobj
+import time
 
 class Effect(object):
     """Effect class
 
-    A effect object stores a single effect relating
-    to modify a parent pedal. This is a base class.
+    The base effect class.
 
     Attributes:
-        parent: The effect's parent pedal object.
         name: The string formatted name of the effect.
     """
-    def __init__(self, parent, name=''):
+    def __init__(self, name=''):
         """Initialization function for a new effect object.
         
         Arguments:
-            parent: The effect's parent pedal object.
             name: The name of the effect.
         """
         super(Effect, self).__init__()
-        self.__parent = parent
+        self._signal = sndobj.SndObj()
         self.__set_name(name)
-        self.__signal
-    
-    def __rshift__(self, out_signal):
-        """Overrides the '>>' operator to give signal input passing capability."""
-        if isinstance(out_signal, AudioOut):
-            # If the signal going out is to the output DAC, then set the last
-            # signal to DAC output
-            out_signal.__signal.SetOutput(1, self.__signal)
-            out_signal.__signal.SetOutput(2, self.__signal)
-        elif issubclass(type(out_signal), Effect):
-            # Add the previous signal to the output signal
-            out_signal.__signal += self.__signal
-        else:
-            # Add exception raise: InputDatatypeError
-            return
-
-    def __get_parent(self):
-        """Getter for the parent pedal object."""
-        return self.__parent
 
     def __get_name(self):
         """Getter for the effect name."""
@@ -60,8 +39,6 @@ class Effect(object):
             # Add exception raise: InputDatatypeError
             return
 
-    parent = property(fget=__get_parent, 
-                      doc='Gets the parent pedal name.')
     name = property(fget=__get_name, fset=__set_name,
                     doc='Gets or sets the effect name.')
 
@@ -72,20 +49,13 @@ class AudioIn(Effect):
     analog to digital converter.
     
     Attributes:
-        parent: The effect's parent pedal object.
+        adc: The analog-to-digital converter controller.
     """
-    def __init__(self, parent):
-        """
-        Initialization function for the AudioOut object.
-        
-        Arguments:
-            parent: The effect's parent pedal object.
-        """
-        super(AudioIn, self).__init__(parent, name='In')
-        #TODO(evan): Put the adc determination in its own function. This will
-        #            be variable depending on the system being run on.
+    def __init__(self):
+        """Initialization function for the AudioOut object."""
+        super(AudioIn, self).__init__(name='In')
         self.__adc = sndobj.SndRTIO(2, sndobj.SND_INPUT)
-        self.__signal = sndobj.SndIn(self.__adc)
+        self._signal = sndobj.SndIn(self.__adc, 1)
     
     def __get_adc(self):
         """Getter for the AudioIn object's analog to digital converter"""
@@ -101,26 +71,21 @@ class AudioOut(Effect):
     digital to analog converter.
     
     Attributes:
-        parent: The effect's parent pedal object.
+        dac: The digital-to-analog converter controller.
     """
-    def __init__(self, parent):
+    def __init__(self):
         """
         Initialization function for the AudioOut object.
         
         Arguments:
-            parent: The effect's parent pedal object.
+            None
         """
-        super(AudioOut, self).__init__(parent, name='Out')
-        self.__signal = sndobj.SndRTIO(2, sndobj.SND_OUTPUT)
-    
-    def __rshift__(self, out_signal):
-        # Do not allow right bitshift operator
-        # Raise invalid operator exception
-        return
+        super(AudioOut, self).__init__(name='Out')
+        self.__dac = sndobj.SndRTIO(2, sndobj.SND_OUTPUT)
     
     def __get_dac(self):
         """Getter for the AudioOut object's digital to analog converter"""
-        return self.__signal
+        return self.__dac
     
     dac = property(fget=__get_dac,
                    doc="Gets the digital-to-analog converter.")
@@ -131,22 +96,20 @@ class BandpassFilter(Effect):
     Representing an pedal bandpass filtering of the output signal.
     
     Attributes:
-        parent: The bandpass filter effect's parent pedal object.
         name: The formatted name of the bandpass filter effect.
         frequency: The active bandpass frequency. [Hz]
         bandwidth: The throughput bandwidth of the bandpass filter. [Hz]
     """
-    def __init__(self, parent, name='', frequency=0., bandwidth=0.):
+    def __init__(self, name='', frequency=0., bandwidth=0.):
         """Initialization function for a new BandpassFilter object.
         
         Arguments:
-            parent: The bandpass filter effect's parent pedal object.
             name: The formatted name of the bandpass filter effect.
             frequency: The active bandpass frequency. [Hz]
             bandwidth: The throughput bandwidth of the bandpass filter. [Hz]
         """
-        super(BandpassFilter, self).__init__(parent, name)
-        self.__signal = sndobj.Filter()
+        super(BandpassFilter, self).__init__(name)
+        self._signal = sndobj.Filter()
         self.__set_frequency(frequency)
         self.__set_bandwidth(bandwidth)
     
@@ -157,24 +120,29 @@ class BandpassFilter(Effect):
     def __set_frequency(self, new_frequency):
         """Setter for the bandpass filter's frequency property. [Hz]"""
         if isinstance(new_frequency, float) and new_frequency >= 0.:
-            self.__signal.SetFreq(new_frequency)
+            self._signal.SetFreq(new_frequency)
             self.__frequency = new_frequency
         else:
             # Add exception raise: InputDatatypeError
             return
     
-    def __set_bandwidth(self):
+    def __get_bandwidth(self):
         """Getter for the bandpass filter's bandwidth property. [Hz]"""
         return self.__bandwidth
     
-    def __get_bandwidth(self, new_bandwidth):
+    def __set_bandwidth(self, new_bandwidth):
         """Setter for the bandpass filter's bandwidth property. [Hz]"""
         if isinstance(new_bandwidth, float) and new_bandwidth >= 0.:
-            self.__signal.SetBW(new_bandwidth)
+            self._signal.SetBW(new_bandwidth)
             self.__bandwidth = new_bandwidth
         else:
             # Add exception raise: InputDatatypeError
             return
+    
+    frequency = property(fget=__get_frequency, fset=__set_frequency,
+                         doc="Gets and sets the pass frequency. [Hz]")
+    bandwidth = property(fget=__get_bandwidth, fset=__set_bandwidth,
+                         doc="Gets and sets the pass bandwidth. [Hz]")
     
 class Delay(Effect):
     """Delay class
@@ -182,7 +150,6 @@ class Delay(Effect):
     Representing an pedal delay of the output signal.
     
     Attributes:
-        parent: The delay effect's parent pedal object.
         name: The formatted name of the gain effect.
         max_delay: The maximum time delay of the signal. [s]
         delay: Delay time added to the signal. [s]
@@ -190,12 +157,11 @@ class Delay(Effect):
         feedforward_gain: Gain factor of the forward fed signal. [-] 
         direct_gain: Gain factor of the delay bypass signal. [-]
     """
-    def __init__(self, parent, name='', max_delay=0., delay=0.,
-                 feedback_gain=0., feedforward_gain=0., direct_gain=0.):
+    def __init__(self, name='', max_delay=0., delay=0., feedback_gain=0.,
+                 feedforward_gain=0., direct_gain=0.):
         """Initialization function for a new Delay object.
         
         Arguments:
-            parent: The delay effect's parent pedal object.
             name: The formatted name of the gain effect.
             max_delay: The maximum time delay of the signal. [s]
             delay: Delay time added to the signal. [s]
@@ -203,8 +169,8 @@ class Delay(Effect):
             feedforward_gain: Gain factor of the forward fed signal. [-] 
             direct_gain: Gain factor of the delay bypass signal. [-]
         """
-        super(Delay, self).__init__(parent, name)
-        self.__signal = sndobj.VDelay()
+        super(Delay, self).__init__(name)
+        self._signal = sndobj.VDelay()
         self.__set_max_delay(max_delay)
         self.__set_delay(delay)
         self.__set_feedback_gain(feedback_gain)
@@ -218,7 +184,7 @@ class Delay(Effect):
     def __set_max_delay(self, new_max_delay):
         """Setter for the delay's maximum delay time property. [s]"""
         if isinstance(new_max_delay, float) and new_max_delay >= 0.:
-            self.__signal.SetMaxDelayTime(new_max_delay)
+            self._signal.SetMaxDelayTime(new_max_delay)
             self.__max_delay = new_max_delay
         else:
             # Add exception raise: InputDatatypeError
@@ -231,11 +197,13 @@ class Delay(Effect):
     def __set_delay(self, new_delay):
         """Setter for the delay's delay time property. [s]"""
         if isinstance(new_delay, float) and new_delay >= 0.:
-            self.__signal.SetDelayTime(new_delay)
-            self.__delay = new_delay
+            self._signal.SetDelayTime(new_delay)
+        elif issubclass(type(new_delay), Effect):
+            self._signal.SetVdtInput(new_delay._signal)
         else:
             # Add exception raise: InputDatatypeError
             return
+        self.__delay = new_delay
     
     def __get_feedback_gain(self):
         """Getter for the delay's feedback gain. [-]"""
@@ -244,13 +212,12 @@ class Delay(Effect):
     def __set_feedback_gain(self, new_feedback_gain):
         """Setter for the delay's feedback gain. [-]"""
         if isinstance(new_feedback_gain, float):
-            self.__signal.SetFdbgain(new_feedback_gain)
+            self._signal.SetFdbgain(new_feedback_gain)
         elif issubclass(type(new_feedback_gain), Effect):
-            self.__signal.SetFdbgain(0, new_feedback_gain.__signal)
+            self._signal.SetFdbgain(0., new_feedback_gain._signal)
         else:
             # Add exception raise: InputDatatypeError
             return
-        
         self.__feedback_gain = new_feedback_gain
     
     def __get_feedforward_gain(self):
@@ -260,13 +227,12 @@ class Delay(Effect):
     def __set_feedforward_gain(self, new_feedforward_gain):
         """Setter for the delay's forward fed gain. [-]"""
         if isinstance(new_feedforward_gain, float):
-            self.__signal.SetFwdgain(new_feedforward_gain)
+            self._signal.SetFwdgain(new_feedforward_gain)
         elif issubclass(type(new_feedforward_gain), Effect):
-            self.__signal.SetFwdgain(0, new_feedforward_gain.__signal)
+            self._signal.SetFwdgain(0., new_feedforward_gain._signal)
         else:
             # Add exception raise: InputDatatypeError
             return
-        
         self.__feedforward_gain = new_feedforward_gain
     
     def __get_direct_gain(self):
@@ -276,13 +242,12 @@ class Delay(Effect):
     def __set_direct_gain(self, new_direct_gain):
         """Setter for the delay's direct gain. [-]"""
         if isinstance(new_direct_gain, float):
-            self.__signal.SetDirgain(new_direct_gain)
+            self._signal.SetDirgain(new_direct_gain)
         elif issubclass(type(new_direct_gain), Effect):
-            self.__signal.SetDirgain(0, new_direct_gain.__signal)
+            self._signal.SetDirgain(0., new_direct_gain._signal)
         else:
             # Add exception raise: InputDatatypeError
             return
-        
         self.__direct_gain = new_direct_gain
     
     max_delay = property(fget=__get_max_delay, fset=__set_max_delay,
@@ -306,22 +271,20 @@ class Gain(Effect):
     Representing an pedal gain of the output signal.
     
     Attributes:
-        parent: The gain effect's parent pedal.
         name: The string formatted name of the gain effect.
         level: The active level of the gain. [dB]
         multiplier: The multiplication factor of the gain. [-]
     """
-    def __init__(self, parent, name='', gain=10., multiplier=1.):
+    def __init__(self, name='', level=10., multiplier=1.):
         """Initialization function for a new Gain object.
         
         Arguments:
-            parent: The gain effect's parent pedal.
             name: The formatted name of the gain effect.
             level: The active level of the gain. [dB]
             multiplier: The multiplication factor of the gain. [-]
         """
-        super(Gain, self).__init__(parent, name)
-        self.__signal = sndobj.Gain()
+        super(Gain, self).__init__(name)
+        self._signal = sndobj.Gain()
         self.__set_level(level)
         self.__set_multiplier(multiplier)
 
@@ -332,7 +295,7 @@ class Gain(Effect):
     def __set_level(self, new_level):
         """Setter for the gain level property. [dB]"""
         if isinstance(new_level, float):
-            self.__signal.SetGain(new_level)
+            self._signal.SetGain(new_level)
             self.__level = new_level
         else:
             # Add exception raise: InputDatatypeError
@@ -345,7 +308,7 @@ class Gain(Effect):
     def __set_multiplier(self, new_multiplier):
         """Setter for the gain multiplier property. [-]"""
         if isinstance(new_multiplier, float):
-            self.__signal.SetGainM(new_multiplier)
+            self._signal.SetGainM(new_multiplier)
             self.__multiplier = new_multiplier
         else:
             # Add exception raise: InputDatatypeError
@@ -362,20 +325,18 @@ class Pan(Effect):
     Represents and pedal pan augmentation.
     
     Attributes:
-        parent: The pan effect's parent pedal object.
         name: The formatted name of the pan effect.
         pan: The pan level from -1 (100% left) to 1 (100% right). [-]
     """
-    def __init__(self, parent, name='', pan=0.):
+    def __init__(self, name='', pan=0.):
         """Initializes the pan effect.
         
         Arguments:
-            parent: The pan effect's parent pedal object.
             name: The formatted name of the pan effect.
             pan: The pan level from -1 (100% left) to 1 (100% right). [-]
         """
-        super(Pan, self).__init__(parent, name)
-        self.__signal = sndobj.Pan()
+        super(Pan, self).__init__(name)
+        self._signal = sndobj.Pan()
         self.__set_pan(pan)
     
     def __get_pan(self):
@@ -384,14 +345,13 @@ class Pan(Effect):
     
     def __set_pan(self, new_pan):
         """Setter for the pan property"""
-        if isinstance(new_pan, float) and new_pan <= 1. and new_pan >= -1.:
-            self.__signal.SetPan(new_pan)
+        if (isinstance(new_pan, float) and new_pan <= 1. and new_pan >= -1.):
+            self._signal.SetPan(new_pan)
         elif issubclass(type(new_pan), Effect):
-            self.__signal.SetPan(0, new_pan.__signal)
+            self._signal.SetPan(0., new_pan._signal)
         else:
             # Add exception raise: InputDatatypeError
             return
-        
         self.__pan = new_pan
     
     pan = property(fget=__get_pan, fset=__set_pan,
@@ -403,22 +363,20 @@ class Phase(Effect):
     Represents an pedal phase augmentation.
     
     Attributes:
-        parent: The phase effect's parent pedal object.
         name: The formatted name of the phase effect.
         frequency: The phasor frequency. [Hz]
         offset: Signal phase in fractions of a cycle. [-] (0-1.0)
     """
-    def __init__(self, parent, name='', frequency=0., offset=0.):
+    def __init__(self, name='', frequency=0., offset=0.):
         """Initializes the phase effect.
         
         Arguments:
-            parent: The phase effect's parent pedal object.
             name: The string formatted name of the phase effect.
             frequency: The phasor frequency. [Hz]
             offset: Initial phase offset in fractions of a cycle. [-] (0-1.0)
         """
-        super(Phase, self).__init__(parent, name)
-        self.__signal = sndobj.Phase()
+        super(Phase, self).__init__(name)
+        self._signal = Phase()
         self.__set_frequency(frequency)
         self.__set_offset(offset)
 
@@ -429,15 +387,14 @@ class Phase(Effect):
     def __set_frequency(self, new_frequency):
         """Setter for the phasor frequency property."""
         if isinstance(new_frequency, float) and new_frequency >= 0.:
-            self.__signal.SetFreq(new_frequency)
+            self._signal.SetFreq(new_frequency)
         elif issubclass(type(new_frequency), Effect):
-            self.__signal.SetFreq(0, new_frequency)
+            self._signal.SetFreq(0., new_frequency._signal)
         else:
             # Add exception raise: InputDatatypeError
             return
-        
         self.__frequency = new_frequency
-
+    
     def __get_offset(self):
         """Getter for the phase offset property."""
         return self.__offset
@@ -446,7 +403,7 @@ class Phase(Effect):
         """Setter for the phase offset property."""
         if (isinstance(new_offset, float) and new_offset >= 0.
             and new_offset <= 1.):
-            self.__signal.SetPhase(new_offset)
+            self._signal.SetPhase(new_offset)
             self.__offset = new_offset
         else:
             # Add exception raise: InputDatatypeError
@@ -457,10 +414,53 @@ class Phase(Effect):
     offset = property(fget=__get_offset, fset=__set_offset,
                       doc='Gets or sets the phase offset. [-] (0-1.0)')
 
-# Main function for class file
-# (should remain relatively unused outside of small-scale class testing)
 def main():
     print('hello, effect')
+    
+    # New prototype effect stacking idea
+    # 1. Wrap the effect stacking data structure inside of
+    #    another object. This object should also wrap thread
+    #    object and contain the thread executing functions.
+    # 2. This eliminates the need for overriding of any operators
+    #    such as the currently implemented '<<' overriding.
+    # 3. This should be able to also wrap effects such as AudioIn
+    #    and AudioOut.
+    #
+    # examples:
+    #    AudioChain.link(?)
+    #    AudioChain.unlink(?)
+    #    AudioChain.split(?)
+    #    AudioChain.merge(?)
+    #    AudioChain.on()
+    #    AudioChain.off()
+    #
+    # We want the object to be able to be successfully structure the chain
+    # AudioNode should contain an effect and hold information such as the
+    # previous and next node. A MergeNode and SplitNode should contain
+    # information relating to the merge and split, but in this case merge will
+    # contain two previous node ids and split will contain two next node ids.
+    
+    # This is the old sndobj format. This will be changed.
+    #thread = sndobj.SndThread()
+    #thread.AddObj(input.adc, sndobj.SNDIO_IN)
+    #thread.AddObj(output.dac, sndobj.SNDIO_OUT)
+    #thread.AddObj(input._signal)
+    #thread.AddObj(delay._signal)
+    #thread.AddObj(gain._signal)
+    #thread.ProcOn()
+    #time.sleep(30) # Process for 30 seconds
+    #thread.ProcOff()
+    
+    # First version of the wrapper using the '<<' override concept. This was
+    # discontinued due to too much interaction of the same inhereted classes.
+    #input = AudioIn()
+    #output = AudioOut()
+    #gain = Gain(name='Gain', level=0.5, multiplier=1.0)
+    #delay = Delay(name='Delay', max_delay=5.0, delay=0.2, feedback_gain=0.7,
+    #              feedforward_gain=0.0, direct_gain=0.0)
+    #delay << input
+    #output << delay
+    
     return
 
 if __name__ == '__main__':

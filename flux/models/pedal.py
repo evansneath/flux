@@ -6,9 +6,9 @@ This module defines the Pedal class.
 """
 
 # Library imports
-import logging
+from chain import AudioChain
 
-class Pedal(object):
+class Pedal(AudioChain):
     """Pedal class
 
     An effect object stores all details relating to a
@@ -17,8 +17,8 @@ class Pedal(object):
     not.
 
     Attributes:
-        name: The string formatted name of the pedal.
-        effects: A list of the pedal effects.
+        name: The name of the pedal.
+        description: A descriptive string of the pedal's function.
     """
     def __init__(self, name):
         """Initialization function for a new pedal object.
@@ -28,7 +28,7 @@ class Pedal(object):
         """
         super(Pedal, self).__init__()
         self.__name = name
-        self.__effect_list = []
+        self.__description = None
 
     # Private functions
     def __get_name(self):
@@ -38,34 +38,21 @@ class Pedal(object):
     def __set_name(self, new_name):
         """Setter for the pedal name property."""
         self.__name = new_name
-
-    def __get_effects(self):
-        """Getter for the pedal list of effects."""
-        return self.__effects
+    
+    def __get_description(self):
+        """Getter for the pedal description property."""
+        return self.__description
+    
+    def __set_description(self, new_description):
+        """Setter for hte pedal description property."""
+        self.__description = new_description
 
     # Property declarations
     name = property(fget=__get_name, fset=__set_name,
                     doc='Gets or sets the pedal name.')
-    effects = property(fget=__get_effects, 
-                          doc='Gets the list of effects.')
-    
-    def stack(self, effect):
-        pass
-    
-    def unstack(self):
-        pass
-    
-    def synthesize(self):
-        pass
-    
-    def start(self):
-        pass
-    
-    def stop(self):
-        pass
+    description = property(fget=__get_description, fset=__set_description,
+                           doc='Gets or sets the pedal description.')
 
-# Main function for class file 
-# (should remain relatively unused outside of small-scale class testing)
 def main():
     print('hello, pedal')
     return

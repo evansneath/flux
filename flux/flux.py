@@ -56,6 +56,5 @@ def main():
     logging.info('Processing terminated gracefully. Goodbye.')
     return 0
 
-# This module will always be main unless unit testing is taking place.
 if __name__ == '__main__':
     sys.exit(main())
