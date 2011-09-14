@@ -6,9 +6,9 @@ This module defines the Pedal class.
 """
 
 # Library imports
-from chain import AudioChain
+from chain import Chain
 
-class Pedal(AudioChain):
+class Pedal(Chain):
     """Pedal class
 
     An effect object stores all details relating to a
