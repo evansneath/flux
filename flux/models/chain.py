@@ -2,183 +2,138 @@
 
 """chain.py
 
-This module defines the AudioChain class and its node classes.
+This module defines the generic Chain structure and its node classes.
 """
 
-# Library imports
-import effect
-from sndobj import SndThread
-
-class AudioChain(object):
-    """AudioChain class
+class Chain(object):
+    """Chain class
     
-    Organizes and drives the effect objects and processing threads.
+    Organizes the chain data structure.
     """
     def __init__(self):
-        """Initialization function for a new AudioChain object."""
-        super(AudioChain, self).__init__()
+        """Initialization function for a new Chain object."""
+        super(Chain, self).__init__()
+        self.__head_id = None
+        self.__tail_id = None
+        
         self.__nodes = dict()
         self.__id_ticker = 0
-        self.__node_count = 0
-        
-        # Populate sound thread
-        self.__thread = sndobj.SndThread()
     
-    def link(self, effect, prev_id=None):
-        """Links a new effect onto the signal chain.
+    def add(self, payload):
+        """Adds a new payload node onto the end of the chain.
         
         Arguments:
-            effect: An effect to link to the effects chain.
-            prev_id: The id of the chain node where the effect node should be
-                attached. If none is defined, assumed to be first node.
+            payload: An effect to add to the effects chain.
         Returns:
-            The id of the linked effect. None on failure.
+            The id of the added effect. None on failure.
         """
-        # Verify that the node is either the first or references a previous
-        # node. Return no created node id if this is the case.
-        if prev_id not in self.__nodes and self.__node_count is not 0:
-            return None
+        node_id = self.__id_ticker
         
-        # Verify effect payload.
-        if effect is not instanceof(effect.Effect) \
-            or not issubclass(effect, effect.Effect):
-            return None
+        if not self.__nodes.items():
+            # If the dictionary is empty, this is the head node.
+            self.__head_id = node_id
+        else:
+            # Update current pointed node's next value to the new node's id.
+            self.__nodes[self.__tail_id].next_id = node_id
         
-        # Increment the id ticker to provide a unique id to the new node.
-        node_id, self.__id_ticker = self.__id_ticker + 1
-        
-        # Create new EffectNode and add to dictionary.
-        self.__nodes[node_id] = EffectNode(node_id, prev_id, next_id, effect)
-        self.__node_count += 1
-        
-        # TODO: Add special support for MergeNode and ForkNode previous and
-        # next nodes when a node is added.
-        
-        # If the added node is not the first, adopt the previous node's next
-        # node if it is defined.
-        if self.__nodes[prev_id]:
-            self.__nodes[node_id].next_id = self.__nodes[prev_id].next_id
-            self.__nodes[prev_id].next_id = node_id
-        
-        # TODO: Add effect to the audio processing thread. Link new effect
-        # input and output to the previous and next effect (if they exist).
+        self.__nodes[node_id] = ChainNode(next_id=None, payload=payload)
+        self.__tail_id = node_id
+        self.__id_ticker += 1
         
         return node_id
     
-    def unlink(self, node_id):
-        """Unlinks a specified node from the signal chain.
+    def remove(self, node_id):
+        """Removes a specified node from the chain.
         
         Arguments:
-            node_id: The id of the node to unlink from the chain.
+            node_id: The id of the node to remove from the chain.
         Returns:
-            The unlinked chain node.
+            The payload of the removed chain node. None on failure.
         """
-        pass
+        # Determine if the node id inputted exists.
+        if node_id not in self.__nodes:
+            return None
+        
+        # Get all next id references to the node to be deleted.
+        reference_list = self._find_by_next_id(node_id)
+        for reference_node_id in reference_list:
+            # Changed those nodes' next ids to the next id of the removed node.
+            self.__nodes[reference_node_id].next_id = \
+                self.__nodes[node_id].next_id
+        
+        # The payload should be saved to return from the function.
+        old_payload = self.__nodes[node_id].payload
+        # Delete the object to ensure no unreferenced nodes.
+        del(self.__nodes[node_id])
+        
+        return old_payload
     
-    def fork(self, prev_id):
-        """Splits (or forks) a chain into two output ends.
+    def find_by_id(self, node_id):
+        """Searches for a specified node id from the chain.
         
         Arguments:
-            prev_id: The id of the chain node where the fork node should be
-                attached.
+            node_id: The id of the node to search for.
         Returns:
-            The id of the created fork node.
+            The node payload object if found, None if not found.
         """
-        pass
+        if self.__nodes.has_key(node_id):
+            return self.__nodes[node_id].payload
+        else:
+            return None
     
-    def merge(self, prev_id):
-        """Merges two separate node chains into one output end.
+    def find_all(self):
+        """Returns all currently present nodes.
         
         Arguments:
-            prev_id: The id of the chain node where the merge node should be
-                attached.
+            None
         Returns:
-            The id of the created merge node.
+            The list of all nodes currently contained within the chain.
         """
-        pass
+        return self.__nodes.keys()
     
-    def start():
-        """Starts the chain signal processing thread.
+    def _find_by_next_id(self, node_id):
+        """Searches for next_id references to the specified node_id.
         
+        Arguments:
+            node_id: The id of the node which to search for references to.
         Returns:
-            True on successful start. False on error.
+            A list of node ids which reference the node_id node.
         """
-        pass
+        found = list()
+        for node in self.__nodes.items():
+            if node[1].next_id is node_id:
+                found.append(node[0])
+        return found
     
-    def stop():
-        """Stops the chain signal processing thread.
-        
-        Returns:
-            True on successful start. False on error.
-        """
-        pass
+    def __get_count(self):
+        """Getter for the node count property."""
+        return len(self.__nodes)
+    
+    count = property(fget=__get_count, doc='Gets the node count.')
 
 class ChainNode(object):
-    def __init__(self, node_id, prev_id=None, next_id=None):
+    def __init__(self, next_id=None, payload=None):
         """Initialization function for the generic ChainNode object.
         
         Arguments:
-            node_id: The unique identifier for the node within the chain.
-            prev_id: Reference to the previous node in the chain.
             next_id: Reference to the next node in the chain.
+            payload: The data for the chain node to encapsulate.
         """
-        self.node_id = node_id
-        self.prev_id = prev_id
         self.next_id = next_id
-    
-    def __str__(self):
-        """Override string output."""
-        print('ChainNode:{}'.format(self.node_id))
-
-class EffectNode(ChainNode):
-    def __init__(self, node_id, prev_id=None, next_id=None, effect=None):
-        """Initialization function for the EffectNode object.
-        
-        Arguments:
-            node_id: The unique identifier for the node in the chain.
-            prev_id: Reference to the previous node in the chain.
-            next_id: Reference to the next node in the chain.
-            effect: The effect payload of the node.
-        """
-        super(EffectNode, self).__init__(node_id, prev_id, next_id)
-        self.effect = effect
-    
-    def __str__(self):
-        """Override string output."""
-        print('EffectNode:{}'.format(self.node_id))
-
-class MergeNode(ChainNode):
-    def __init__(self, node_id, prev_id=[None, None], next_id=None):
-        """Initialization function for ChainNode object.
-        
-        Arguments:
-            node_id: The unique identifier for the node in the chain.
-            prev_id: Reference to the two previous nodes in the chain to merge.
-            next_id: Reference to the next node in the chian
-        """
-        super(MergeNode, self).__init__(node_id, prev_id, next_id)
-    
-    def __str__(self):
-        """Override string output."""
-        print('MergeNode:{}'.format(self.node_id))
-
-class ForkNode(ChainNode):
-    def __init__(self, node_id, prev_id=None, next_id=[None, None]):
-        """Initialization function for ForkNode object.
-        
-        Arguments:
-            node_id: The unique identifier for the node in the chain.
-            prev_id: Reference to the previous node in the chain.
-            next_id: Reference to the two next nodes in the chain to fork.
-        """
-        super(ForkNode, self).__init__(node_id, prev_id, next_id)
-    
-    def __str__(self):
-        """Override string output."""
-        print('ForkNode:{}'.format(self.node_id))
+        self.payload = payload
 
 def main():
     print('hello, chain')
+    
+    # TEST AREA - WEAR A HARDHAT
+    c = Chain()
+    c.add('hello')
+    c.add('world')
+    c.add('evan')
+    c.add('sneath')
+    print(c.find_all())
+    # END TEST AREA
+    
     return
 
 if __name__ == '__main__':
