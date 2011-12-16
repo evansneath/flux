@@ -7,7 +7,6 @@ This module defines the Effect class and its subclass types.
 
 # Library imports
 import sndobj
-import time
 
 class Effect(object):
     """Effect class
@@ -54,8 +53,8 @@ class AudioIn(Effect):
     def __init__(self):
         """Initialization function for the AudioOut object."""
         super(AudioIn, self).__init__(name='In')
-        self.__adc = sndobj.SndRTIO(2, sndobj.SND_INPUT)
-        self._signal = sndobj.SndIn(self.__adc, 1)
+        self.__adc = sndobj.SndRTIO(1, sndobj.SND_INPUT)
+        self._signal = sndobj.SndIn(self.__adc, 0)
     
     def __get_adc(self):
         """Getter for the AudioIn object's analog to digital converter"""
@@ -81,7 +80,7 @@ class AudioOut(Effect):
             None
         """
         super(AudioOut, self).__init__(name='Out')
-        self.__dac = sndobj.SndRTIO(2, sndobj.SND_OUTPUT)
+        self.__dac = sndobj.SndRTIO(1, sndobj.SND_OUTPUT)
     
     def __get_dac(self):
         """Getter for the AudioOut object's digital to analog converter"""
@@ -318,44 +317,6 @@ class Gain(Effect):
                      doc='Gets or sets the gain level. [dB]')
     multiplier = property(fget=__get_multiplier, fset=__set_multiplier,
                           doc='Gets or sets the gain multiplier. [-]')
-
-class Pan(Effect):
-    """Pan class
-    
-    Represents and pedal pan augmentation.
-    
-    Attributes:
-        name: The formatted name of the pan effect.
-        pan: The pan level from -1 (100% left) to 1 (100% right). [-]
-    """
-    def __init__(self, name='', pan=0.):
-        """Initializes the pan effect.
-        
-        Arguments:
-            name: The formatted name of the pan effect.
-            pan: The pan level from -1 (100% left) to 1 (100% right). [-]
-        """
-        super(Pan, self).__init__(name)
-        self._signal = sndobj.Pan()
-        self.__set_pan(pan)
-    
-    def __get_pan(self):
-        """Getter for the pan property"""
-        return self.__pan
-    
-    def __set_pan(self, new_pan):
-        """Setter for the pan property"""
-        if (isinstance(new_pan, float) and new_pan <= 1. and new_pan >= -1.):
-            self._signal.SetPan(new_pan)
-        elif issubclass(type(new_pan), Effect):
-            self._signal.SetPan(0., new_pan._signal)
-        else:
-            # Add exception raise: InputDatatypeError
-            return
-        self.__pan = new_pan
-    
-    pan = property(fget=__get_pan, fset=__set_pan,
-                   doc="Gets and sets the pan levels. [-]")
 
 class Phase(Effect):
     """Phase class
