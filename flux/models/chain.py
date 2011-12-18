@@ -8,6 +8,7 @@ This module defines the AudioChain structure and its node classes.
 # Library imports
 import sndobj
 import effect
+import time
 
 class AudioChain(object):
     """AudioChain class
@@ -16,13 +17,18 @@ class AudioChain(object):
     """
     def __init__(self):
         """Initialization function for a new Chain object."""
-        super(Chain, self).__init__()
-        thread = sndobj.SndThread()
-        input = AudioIn()
-        output = AudioOut()
-        effect_list = List()
+        super(AudioChain, self).__init__()
+        # Define audio thread.
+        self.__thread = sndobj.SndThread()
+        # Define input (adc) and output (dac) objects.
+        self.__input = effect.AudioIn()
+        self.__output = effect.AudioOut()
+        # Route output from the given input object.
+        self.__output.dac.SetOutput(1, self.__input._signal)
+        # List to store all defined effects.
+        self.__effect_list = list()
     
-    def add(effect):
+    def add(self, new_effect):
         """Adds a new effect to the effect chain.
         
         Arguments:
@@ -30,13 +36,13 @@ class AudioChain(object):
         Returns:
             True upon successful add, False if unsuccessful.
         """
-        if issubclass(type(effect), Effect):
-            effect_list.append(effect)
+        if issubclass(type(new_effect), effect.Effect):
+            self.__effect_list.append(new_effect)
             return True
         else:
             return False
     
-    def remove(index):
+    def remove(self, index):
         """Removes an effect from the effect chain.
         
         Arguments:
@@ -44,34 +50,48 @@ class AudioChain(object):
         Returns:
             The effect that was removed.
         """
-        if index in effect_list:
-            del_effect = effect_list[index]
-            effect_list.remove(index)
+        if index in self.__effect_list:
+            del_effect = self.__effect_list[index]
+            self.__effect_list.remove(index)
         else:
             del_effect = None
         return del_effect
     
-    def compile():
+    def compile(self):
         """Links all effects and allows the AudioChain to be processed."""
-        thread.AddObj(input.adc, sndobj.SNDIO_IN)
-        thread.AddObj(output.dac, sndobj.SNDIO_OUT)
-        thread.AddObj(input._signal)
-        for e in effect_list:
-            thread.AddObj(e._signal)
+        # Add dac and adc to the sound thread
+        self.__thread.AddObj(self.__input.adc, sndobj.SNDIO_IN)
+        self.__thread.AddObj(self.__output.dac, sndobj.SNDIO_OUT)
+        # Send the input signal to the thread output
+        self.__thread.AddObj(self.__input._signal)
+        # Add all effects to the thread output
+        for e in self.__effect_list:
+            self.__thread.AddObj(e._signal)
         return
     
-    def start():
+    def start(self):
         """Begins the signal processing for the AudioChain object."""
-        thread.ProcOn()
+        self.__thread.ProcOn()
         return
     
-    def stop():
+    def stop(self):
         """Ends the signal processing for the AudioChain object."""
-        thread.ProcOff()
+        self.__thread.ProcOff()
         return
 
 def main():
     print('hello, chain')
+    
+    # THIS IS A TEST OF THE AUDIOCHAIN CLASS
+    c = AudioChain()
+    c.compile()
+    print('Starting')
+    c.start()
+    time.sleep(10)
+    c.stop()
+    print('Done')
+    # END OF TEST
+    
     return
 
 if __name__ == '__main__':

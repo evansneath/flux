@@ -54,7 +54,7 @@ class AudioIn(Effect):
         """Initialization function for the AudioOut object."""
         super(AudioIn, self).__init__(name='In')
         self.__adc = sndobj.SndRTIO(1, sndobj.SND_INPUT)
-        self._signal = sndobj.SndIn(self.__adc, 0)
+        self._signal = sndobj.SndIn(self.__adc)
     
     def __get_adc(self):
         """Getter for the AudioIn object's analog to digital converter"""
