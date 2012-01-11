@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""snd_test.py
+"""sndobj_test.py
 
 This is a quick module to test the I/O capabilities of pySndObj
 """
