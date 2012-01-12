@@ -20,7 +20,7 @@ class AudioPath(QtCore.QObject):
             print 'Format not supported, using nearest available'
             format = nearestFormat(format)
             if format.sampleSize != 16:
-                #this is important, since effect assume this sample size.
+                #this is important, since effects assume this sample size.
                 raise RuntimeError('16-bit sample size not supported!')
         
         self.audio_input = QtMultimedia.QAudioInput(format, app)
@@ -35,14 +35,14 @@ class AudioPath(QtCore.QObject):
         self.source = self.audio_input.start()
         self.sink = self.audio_output.start()
         
-        self.source.readyRead.connect(self.onReadyRead)
+        self.source.readyRead.connect(self.on_ready_read)
         
     def stop(self):
         self.audio_input.stop()
-        #self.source.readyRead.disconnect(self.onReadyRead)
+        #self.source.readyRead.disconnect(self.on_ready_read)
         self.audio_output.stop()
         
-    def onReadyRead(self):
+    def on_ready_read(self):
         data = self.source.readAll()
         
         for effect in self.effects:
@@ -72,10 +72,10 @@ if __name__ == '__main__':
     slider.setTickInterval(1)
     slider.setValue(2)
     
-    def onSliderValueChanged(value):
+    def on_slider_value_changed(value):
         gain.amount = value
 
-    slider.valueChanged.connect(onSliderValueChanged)
+    slider.valueChanged.connect(on_slider_value_changed)
     layout.addWidget(slider, 2, 0, alignment=QtCore.Qt.AlignHCenter)
     play_btn = QtGui.QPushButton("Start")
     play_btn.clicked.connect(path.start)
