@@ -13,6 +13,8 @@ class AudioPath(QtCore.QObject):
         
         info = QtMultimedia.QAudioDeviceInfo.defaultInputDevice()
         format = info.preferredFormat()
+        format.setChannels(1)
+        format.setChannelCount(1)
         format.setSampleSize(16)
         format.setSampleRate(44100)
         
@@ -53,9 +55,13 @@ class AudioPath(QtCore.QObject):
 if __name__ == '__main__':  
     app = QtGui.QApplication(sys.argv)
     
+    distortion = effects.FoldbackDistortion(1.0)
     gain = effects.Gain()
     
     path = AudioPath(app)
+    
+    path.effects.append(distortion)
+    # always keep gain as last added effect to avoid unintended clipping
     path.effects.append(gain)
     
     window = QtGui.QWidget()
