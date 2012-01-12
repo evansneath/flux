@@ -1,3 +1,5 @@
+"""Collection of audio effects that process data contained in QByteArrays"""
+
 import struct
 
 #Use PyQt API 2
@@ -6,7 +8,7 @@ sip.setapi('QString', 2)
 from PyQt4 import QtCore, QtGui, QtMultimedia
 
 class AudioEffect(QtCore.QObject):
-    def processData(self, data):
+    def process_data(self, data):
         #Override this method to process data before writing to output.
         pass
     
@@ -16,7 +18,7 @@ class Gain(AudioEffect):
         
         self.amount = amount
         
-    def processData(self, data):
+    def process_data(self, data):
         for i in xrange(0, len(data), 2):
             value = struct.unpack('<h', data[i:i+2])[0] * self.amount
             #Hard clip value to a signed short int

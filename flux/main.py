@@ -46,7 +46,7 @@ class AudioPath(QtCore.QObject):
         data = self.source.readAll()
         
         for effect in self.effects:
-            effect.processData(data)
+            effect.process_data(data)
         
         self.sink.write(data)
       
