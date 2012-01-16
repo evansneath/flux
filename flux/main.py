@@ -1,11 +1,8 @@
 import sys
 
-import effects
+from PySide import QtCore, QtGui, QtMultimedia
 
-#Use PyQt API 2
-import sip
-sip.setapi('QString', 2)
-from PyQt4 import QtCore, QtGui, QtMultimedia
+import effects
 
 class AudioPath(QtCore.QObject):
     def __init__(self, app):
@@ -41,7 +38,6 @@ class AudioPath(QtCore.QObject):
         
     def stop(self):
         self.audio_input.stop()
-        #self.source.readyRead.disconnect(self.on_ready_read)
         self.audio_output.stop()
         
     def on_ready_read(self):
@@ -51,47 +47,205 @@ class AudioPath(QtCore.QObject):
             effect.process_data(data)
         
         self.sink.write(data)
-      
-if __name__ == '__main__':  
-    app = QtGui.QApplication(sys.argv)
-    
-    distortion = effects.FoldbackDistortion(1.0)
-    gain = effects.Gain()
-    
-    path = AudioPath(app)
-    
-    path.effects.append(distortion)
-    # always keep gain as last added effect to avoid unintended clipping
-    path.effects.append(gain)
-    
-    window = QtGui.QWidget()
-    layout = QtGui.QGridLayout()
-    window.setLayout(layout)
-    
-    label = QtGui.QLabel("Gain Test")
-    layout.addWidget(label, 1, 0, alignment=QtCore.Qt.AlignHCenter)
-    
-    slider = QtGui.QSlider()
-    slider.setTickPosition(QtGui.QSlider.TicksBothSides)
-    slider.setMinimum(1)
-    slider.setMaximum(10)
-    slider.setTickInterval(1)
-    slider.setValue(2)
-    
-    def on_slider_value_changed(value):
-        gain.amount = value
 
-    slider.valueChanged.connect(on_slider_value_changed)
-    layout.addWidget(slider, 2, 0, alignment=QtCore.Qt.AlignHCenter)
-    play_btn = QtGui.QPushButton("Start")
-    play_btn.clicked.connect(path.start)
-    layout.addWidget(play_btn, 3, 0, alignment=QtCore.Qt.AlignHCenter)
-    
-    stop_btn = QtGui.QPushButton("Stop")
-    stop_btn.clicked.connect(path.stop)
-    layout.addWidget(stop_btn, 4, 0, QtCore.Qt.AlignHCenter)
-    
+class FlowLayout(QtGui.QLayout):
+    """Flow layout taken from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
+    def __init__(self, parent=None, margin=0, spacing=-1):
+        super(FlowLayout, self).__init__(parent)
+
+        if parent is not None:
+            self.setContentsMargins(margin, margin, margin, margin)
+
+        self.setSpacing(spacing)
+
+        self.itemList = []
+
+    def __del__(self):
+        item = self.takeAt(0)
+        while item:
+            item = self.takeAt(0)
+
+    def addItem(self, item):
+        self.itemList.append(item)
+
+    def count(self):
+        return len(self.itemList)
+
+    def itemAt(self, index):
+        if index >= 0 and index < len(self.itemList):
+            return self.itemList[index]
+
+        return None
+
+    def takeAt(self, index):
+        if index >= 0 and index < len(self.itemList):
+            return self.itemList.pop(index)
+
+        return None
+
+    def expandingDirections(self):
+        return QtCore.Qt.Orientations(QtCore.Qt.Orientation(0))
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        height = self.doLayout(QtCore.QRect(0, 0, width, 0), True)
+        return height
+
+    def setGeometry(self, rect):
+        super(FlowLayout, self).setGeometry(rect)
+        self.doLayout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QtCore.QSize()
+
+        for item in self.itemList:
+            size = size.expandedTo(item.minimumSize())
+
+        margins = self.getContentsMargins()
+        size += QtCore.QSize(margins[0] + margins[2], margins[1] + margins[3])
+        return size
+
+    def doLayout(self, rect, testOnly):
+        x = rect.x()
+        y = rect.y()
+        lineHeight = 0
+
+        for item in self.itemList:
+            wid = item.widget()
+            spaceX = self.spacing() + wid.style().layoutSpacing(QtGui.QSizePolicy.PushButton, QtGui.QSizePolicy.PushButton, QtCore.Qt.Horizontal)
+            spaceY = self.spacing() + wid.style().layoutSpacing(QtGui.QSizePolicy.PushButton, QtGui.QSizePolicy.PushButton, QtCore.Qt.Vertical)
+            nextX = x + item.sizeHint().width() + spaceX
+            if nextX - spaceX > rect.right() and lineHeight > 0:
+                x = rect.x()
+                y = y + lineHeight + spaceY
+                nextX = x + item.sizeHint().width() + spaceX
+                lineHeight = 0
+
+            if not testOnly:
+                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), item.sizeHint()))
+
+            x = nextX
+            lineHeight = max(lineHeight, item.sizeHint().height())
+
+        return y + lineHeight - rect.y()
+        
+class FluxCentralWidget(QtGui.QWidget):
+    def __init__(self):
+        super(FluxCentralWidget, self).__init__()
+        
+        self.layout = FlowLayout(self, 5)
+        self.setLayout(self.layout)
+        
+class EffectWidget(QtGui.QFrame):
+    _slider_max = 99.0
+    def __init__(self, effect):
+        super(EffectWidget, self).__init__()
+        self.effect = effect
+        
+        self.setObjectName('outer_frame')
+        self.setStyleSheet('''
+            #outer_frame {
+                border-style:outset;
+                border-width:1px;
+                border-color:gray;
+                border-radius:8px;
+            }
+                           ''')
+        self.layout = QtGui.QGridLayout()
+        self.setLayout(self.layout)
+        
+        self.label = QtGui.QLabel(effect.name)
+        self.layout.addWidget(self.label, 0, 0, max((1, len(self.effect.parameters)-1)), 0, QtCore.Qt.AlignHCenter)
+        
+        for column, (name, param) in enumerate(self.effect.parameters.iteritems()):
+            label = QtGui.QLabel(name, self)
+            self.layout.addWidget(label, 1, column, QtCore.Qt.AlignHCenter)
+            
+            slider = QtGui.QSlider(self)
+            slider.setMinimum(0)
+            slider.setMaximum(EffectWidget._slider_max)
+            slider.setValue((float(param.value) / param.maximum) * self._slider_max)
+            slider.setTickInterval(10)
+            slider.setTickPosition(QtGui.QSlider.TicksBothSides)
+            slider.setOrientation(QtCore.Qt.Vertical)
+            slider.valueChanged.connect(self.create_slider_slot(param))
+            self.layout.addWidget(slider, 2, column, QtCore.Qt.AlignHCenter)
+            
+    def create_slider_slot(self, param):
+        def update_paramater(value):
+            ratio = value / EffectWidget._slider_max
+            param.value = param.type(ratio * (param.maximum - param.minimum) + param.minimum)
+        return update_paramater
+            
+        
+
+class FluxWindow(QtGui.QMainWindow):
+    def __init__(self, app):
+        super(FluxWindow, self).__init__()
+        
+        self.app = app
+        self.audio_path = AudioPath(app)
+        
+        #create a dock widget and populate it with available effects
+        self.effect_dock = QtGui.QDockWidget('Available Effects')
+        self.effect_list = QtGui.QListWidget()
+        
+        for effect in effects.available_effects:
+            item = QtGui.QListWidgetItem(effect.name)
+            item.setToolTip(effect.description)
+            self.effect_list.addItem(item)
+            
+        self.effect_list.itemDoubleClicked.connect(self.effect_list_item_selected)
+            
+        #set the default size for the sidebar
+        self.effect_list.sizeHint = lambda: QtCore.QSize(125, 250)
+        self.effect_dock.setWidget(self.effect_list)
+        self.effect_dock.setFeatures(QtGui.QDockWidget.DockWidgetMovable|QtGui.QDockWidget.DockWidgetFloatable)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.effect_dock)
+        
+        #create the top toolbar
+        style = app.style()
+        self.toolbar = QtGui.QToolBar()
+        self.toolbar.setFloatable(False)
+        self.toolbar.setMovable(False)
+        
+        play_icon = style.standardIcon(QtGui.QStyle.SP_MediaPlay)
+        self.toolbar.addAction(play_icon, 'Play', self.play_btn_action)
+        
+        pause_icon = style.standardIcon(QtGui.QStyle.SP_MediaPause)
+        self.toolbar.addAction(pause_icon, 'Pause', self.pause_btn_action)
+        
+        self.addToolBar(self.toolbar)
+        
+        #create the central widget
+        self.central_widget = FluxCentralWidget()
+        self.setCentralWidget(self.central_widget)
+        
+    def sizeHint(self):
+        return QtCore.QSize(600, 400)
+
+    def play_btn_action(self):
+        self.audio_path.start()
+        
+    def pause_btn_action(self):
+        self.audio_path.stop()
+        
+    def effect_list_item_selected(self, list_item):
+        for effect_class in effects.available_effects:
+            if effect_class.name == list_item.text():
+                effect = effect_class()
+                self.audio_path.effects.append(effect)
+                self.central_widget.layout.addWidget(EffectWidget(effect))
+                return
+                
+        
+if __name__ == '__main__':
+    app = QtGui.QApplication(sys.argv)
+    window = FluxWindow(app)
     window.show()
-    
-    path.start()
     app.exec_()

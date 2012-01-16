@@ -3,46 +3,95 @@
 import struct
 import math
 
-#Use PyQt API 2
-import sip
-sip.setapi('QString', 2)
-from PyQt4 import QtCore, QtGui, QtMultimedia
+from PySide import QtCore, QtGui, QtMultimedia
+
+SAMPLE_MAX = 32767
+SAMPLE_MIN = -SAMPLE_MAX
+
+class Parameter(QtCore.QObject):
+    """A description of an effect parameter.
+    
+    Members:
+        maximum -- The largest value that the parameter should contain.
+        minumum -- The smallest value that the parameter should contain.
+        value   -- The current value of the parameter. It is updated whenever the interface element changes.
+        type    -- The type that value sould be stored as.
+    """
+    def __init__(self, type=int, minimum=0, maximum=100, value=10):
+        super(Parameter, self).__init__()
+        
+        #type must be a callable that will convert a value from a float to the desired type
+        self.type = type
+        self.minimum = minimum
+        self.maximum = maximum
+        self.value = value
 
 class AudioEffect(QtCore.QObject):
-    def process_data(self, data):
-        #Override this method to process data before writing to output.
-        pass
-
-class FoldbackDistortion(AudioEffect):
-    def __init__(self, threshold=1.0):
-        super(FoldbackDistortion, self).__init__()
-        
-        self.threshold = threshold * 32767
+    """Base class for audio effects."""
+    name = 'Unknown Effect'
+    description = ''
     
-    def process_data(self, data):        
+    """A dictionary of str(param_name):Parameter items that describes all parameters that a user can alter."""
+    parameters = {}
+    
+    def process_data(self, data):
+        """Apply effect processing to data, modifying data in place."""
+        pass
+    
+    @classmethod
+    def pack_short(cls, value):
+        """Pack a python int into a short int byte string"""
+        #truncate value to a signed short int
+        if value < SAMPLE_MIN:
+            value = SAMPLE_MIN
+        elif value > SAMPLE_MAX:
+            value = SAMPLE_MAX
+        return struct.pack('<h', value)
+        
+class FoldbackDistortion(AudioEffect):
+    name = 'Foldback Distortion'
+    description = ''
+    parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
+    
+    def process_data(self, data):
+        modified_data = QtCore.QByteArray()
+        modified_data.reserve(data.size())
+        threshold = self.parameters['Threshold'].value
         for i in xrange(0, len(data), 2):
             value = struct.unpack('<h', data[i:i+2])[0]
-            
-            if value > self.threshold or value < -self.threshold:
+            if value > threshold or value < -threshold:
                 value = math.floor(math.fabs(math.fabs(math.fmod(
-                    value - self.threshold, self.threshold * 4)) -
-                    self.threshold * 2) - self.threshold)
+                        value - threshold, threshold * 4)) -
+                        threshold * 2) - threshold)
             
-            data.replace(i, 2, struct.pack('<h', value))
+            modified_data.append(self.pack_short(value))
+            
+        data.setRawData(str(modified_data), modified_data.size())
 
 class Gain(AudioEffect):
-    def __init__(self, amount=2):
-        super(Gain, self).__init__()
-        
-        self.amount = amount
+    name = 'Gain'
+    description = 'Increase the volume, clipping loud signals'
+    parameters = {'Amount':Parameter(float, 0, 10, 1)}
     
     def process_data(self, data):
+        modified_data = QtCore.QByteArray()
+        modified_data.reserve(data.size())
+        
         for i in xrange(0, len(data), 2):
-            value = struct.unpack('<h', data[i:i+2])[0] * self.amount
-            #Hard clip value to a signed short int
-            if value < -32768:
-                value = -32768
-            elif value > 32767:
-                value = 32767
-            #modify the data in place 
-            data.replace(i, 2, struct.pack('<h', value))
+            value = struct.unpack('<h', data[i:i+2])[0] * self.parameters['Amount'].value
+            modified_data.append(self.pack_short(value))
+            
+        data.setRawData(str(modified_data), modified_data.size())
+
+class Passthrough(AudioEffect):
+    """An effect for testing"""
+    
+    name = 'Passthrough'
+    description = 'Does not modify the signal'
+    
+    parameters = {'Param 1':Parameter(float, 0, 10, 5),
+                  'Param 2':Parameter()}
+    
+
+#this tuple needs to be maintained manually
+available_effects = (FoldbackDistortion, Gain, Passthrough)
