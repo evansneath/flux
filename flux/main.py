@@ -1,10 +1,13 @@
 import sys
+import time
 
+import numpy
 from PySide import QtCore, QtGui, QtMultimedia
 
 import effects
 
 class AudioPath(QtCore.QObject):
+    ts = []
     def __init__(self, app):
         super(AudioPath, self).__init__()
         
@@ -41,12 +44,11 @@ class AudioPath(QtCore.QObject):
         self.audio_output.stop()
         
     def on_ready_read(self):
-        data = self.source.readAll()
-        
+        data = numpy.fromstring(self.source.readAll(), 'int16')
         for effect in self.effects:
-            effect.process_data(data)
-        
-        self.sink.write(data)
+            if len(data):
+                data = effect.process_data(data)
+        self.sink.write(data.tostring())
 
 class FlowLayout(QtGui.QLayout):
     """Flow layout taken from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""

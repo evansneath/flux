@@ -2,6 +2,7 @@
 
 import struct
 import math
+import numpy
 
 from PySide import QtCore, QtGui, QtMultimedia
 
@@ -35,42 +36,27 @@ class AudioEffect(QtCore.QObject):
     parameters = {}
     
     def process_data(self, data):
-        """Abstract data processing method.
+        """Modify a numpy.aray and return the modified array.
         
         This is an abstract method to represent data processing. Override this
-        function upon new AudioEffect object creation.
-        
-        Args:
-            data: A chunk of input data to process.
-        
-        Returns:
-            Processed data for further processing by another effect or output.
+        function when subclassing AudioEffect.
         """
         pass
-    
-    @classmethod
-    def pack_short(cls, value):
-        """Pack a python int into a short int byte string"""
-        #truncate value to a signed short int
-        if value < SAMPLE_MIN:
-            value = SAMPLE_MIN
-        elif value > SAMPLE_MAX:
-            value = SAMPLE_MAX
-        return struct.pack('<h', value)
 
 class Decimation(AudioEffect):
+    """Decimation / Bitcrushing effect.
+        
+    Parameters:
+        bits -- Amount of bit accuracy in the output data.
+        rate -- Sample rate of the output data.
+    """
     name = 'Decimation'
     description = 'Reduce signal sample rate and/or bit accuracy'
     parameters = {'Bits':Parameter(int, 8, 16, 16),
                   'Rate':Parameter(float, 0.0, 1.0, 1.0)}
     
     def __init__(self, bits=16, rate=1.0):
-        """Decimation effect initiation.
         
-        Args:
-            bits: Amount of bit accuracy in the output data.
-            rate: Sample rate of the output data.
-        """
         super(Decimation, self).__init__()
         
         self.bits = bits
@@ -91,59 +77,42 @@ class Decimation(AudioEffect):
             data.replace(i, 2, struct.pack('<h', modified_value))
 
 class FoldbackDistortion(AudioEffect):
+    """Foldback distortion
+    Parameters:
+        threshold -- A factor from 0.0 to 1.0 representing the percentage of
+                        maximum allowed value to clip.
+    """
     name = 'Foldback Distortion'
     description = ''
     parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
     
-    def __init__(self, threshold=1.0):
-        """Foldback distortion effect initialization.
-        
-        Args:
-            threshold: A factor from 0.0 to 1.0 representing the percentage of
-                maximum allowed value to clip.
-        """
-        super(FoldbackDistortion, self).__init__()
-    
     def process_data(self, data):
-        modified_data = QtCore.QByteArray()
-        modified_data.reserve(data.size())
-        threshold = self.parameters['Threshold'].value
-        for i in xrange(0, len(data), 2):
-            value = struct.unpack('<h', data[i:i+2])[0]
+        def func(value, threshold):
             if value > threshold or value < -threshold:
                 value = math.floor(math.fabs(math.fabs(math.fmod(
                         value - threshold, threshold * 4)) -
                         threshold * 2) - threshold)
-            
-            modified_data.append(self.pack_short(value))
-            
-        data.setRawData(str(modified_data), modified_data.size())
+            return value
+        #it would probably be faster to use numpy.piecewise
+        return numpy.vectorize(func, otypes=['int16'])(data, self.parameters['Threshold'].value)
 
 class Gain(AudioEffect):
+    """Gain effect
+    
+    Parameters:
+       amount -- A factor by which to multiply the input signal. Unintended
+                 clipping can occur if multiplied values exceed 16-bit integer
+                 maximum. 
+    """
     name = 'Gain'
     description = 'Increase the volume, clipping loud signals'
     parameters = {'Amount':Parameter(float, 0, 10, 1)}
-
-    def __init__(self, amount=2):
-        """Gain effect initialization.
-        
-        Args:
-            amount: A factor by which to multiply the input signal. Unintended
-                clipping can occur if multiplied values exceed 16-bit integer
-                maximum.
-        """
-        super(Gain, self).__init__()
-        self.amount = amount
     
     def process_data(self, data):
-        modified_data = QtCore.QByteArray()
-        modified_data.reserve(data.size())
-        
-        for i in xrange(0, len(data), 2):
-            value = struct.unpack('<h', data[i:i+2])[0] * self.parameters['Amount'].value
-            modified_data.append(self.pack_short(value))
-            
-        data.setRawData(str(modified_data), modified_data.size())
+        def func(value, amount):
+            return value * amount
+        #TODO: make this use numpy.multipy then truncate the value or cast them at int16
+        return numpy.vectorize(func, otypes=['int16'])(data, self.parameters['Amount'].value)
 
 class Passthrough(AudioEffect):
     """An effect for testing"""
