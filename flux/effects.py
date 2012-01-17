@@ -35,6 +35,7 @@ class AudioEffect(QtCore.QObject):
     parameters = {}
     
     def process_data(self, data):
+<<<<<<< HEAD
         """Apply effect processing to data, modifying data in place."""
         pass
     
@@ -47,6 +48,57 @@ class AudioEffect(QtCore.QObject):
         elif value > SAMPLE_MAX:
             value = SAMPLE_MAX
         return struct.pack('<h', value)
+=======
+        """Abstract data processing method.
+        
+        This is an abstract method to represent data processing. Override this
+        function upon new AudioEffect object creation.
+        
+        Args:
+            data: A chunk of input data to process.
+        
+        Returns:
+            Processed data for further processing by another effect or output.
+        """
+        pass
+
+class Decimation(AudioEffect):
+    def __init__(self, bits=16, rate=1.0):
+        """Decimation effect initiation.
+        
+        Args:
+            bits: Amount of bit accuracy in the output data.
+            rate: Sample rate of the output data.
+        """
+        super(Decimation, self).__init__()
+        
+        self.bits = bits
+        self.rate = rate
+        self.shifted_bits = 1 << (bits - 1)
+        self.count = 0
+    
+    def process_data(self, data):
+        for i in xrange(0, len(data), 2):
+            value = struct.unpack('<h', data[i:i+2])[0]
+            modified_value = 0
+            
+            self.count += self.rate
+            if self.count >= 1:
+                self.count -= 1
+                modified_value = value * self.shifted_bits / self.shifted_bits
+            
+            data.replace(i, 2, struct.pack('<h', modified_value))
+
+class FoldbackDistortion(AudioEffect):
+    def __init__(self, threshold=1.0):
+        """Foldback distortion effect initialization.
+        
+        Args:
+            threshold: A factor from 0.0 to 1.0 representing the percentage of
+                maximum allowed value to clip.
+        """
+        super(FoldbackDistortion, self).__init__()
+>>>>>>> Added Decimation(BitCrush) effect and comments
         
 class FoldbackDistortion(AudioEffect):
     name = 'Foldback Distortion'
@@ -69,9 +121,23 @@ class FoldbackDistortion(AudioEffect):
         data.setRawData(str(modified_data), modified_data.size())
 
 class Gain(AudioEffect):
+<<<<<<< HEAD
     name = 'Gain'
     description = 'Increase the volume, clipping loud signals'
     parameters = {'Amount':Parameter(float, 0, 10, 1)}
+=======
+    def __init__(self, amount=2):
+        """Gain effect initialization.
+        
+        Args:
+            amount: A factor by which to multiply the input signal. Unintended
+                clipping can occur if multiplied values exceed 16-bit integer
+                maximum.
+        """
+        super(Gain, self).__init__()
+        
+        self.amount = amount
+>>>>>>> Added Decimation(BitCrush) effect and comments
     
     def process_data(self, data):
         modified_data = QtCore.QByteArray()
