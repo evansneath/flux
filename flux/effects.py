@@ -6,7 +6,7 @@ import math
 from PySide import QtCore, QtGui, QtMultimedia
 
 SAMPLE_MAX = 32767
-SAMPLE_MIN = -SAMPLE_MAX
+SAMPLE_MIN = -(SAMPLE_MAX + 1)
 
 class Parameter(QtCore.QObject):
     """A description of an effect parameter.
@@ -35,20 +35,6 @@ class AudioEffect(QtCore.QObject):
     parameters = {}
     
     def process_data(self, data):
-<<<<<<< HEAD
-        """Apply effect processing to data, modifying data in place."""
-        pass
-    
-    @classmethod
-    def pack_short(cls, value):
-        """Pack a python int into a short int byte string"""
-        #truncate value to a signed short int
-        if value < SAMPLE_MIN:
-            value = SAMPLE_MIN
-        elif value > SAMPLE_MAX:
-            value = SAMPLE_MAX
-        return struct.pack('<h', value)
-=======
         """Abstract data processing method.
         
         This is an abstract method to represent data processing. Override this
@@ -61,8 +47,23 @@ class AudioEffect(QtCore.QObject):
             Processed data for further processing by another effect or output.
         """
         pass
+    
+    @classmethod
+    def pack_short(cls, value):
+        """Pack a python int into a short int byte string"""
+        #truncate value to a signed short int
+        if value < SAMPLE_MIN:
+            value = SAMPLE_MIN
+        elif value > SAMPLE_MAX:
+            value = SAMPLE_MAX
+        return struct.pack('<h', value)
 
 class Decimation(AudioEffect):
+    name = 'Decimation'
+    description = 'Reduce signal sample rate and/or bit accuracy'
+    parameters = {'Bits':Parameter(int, 8, 16, 16),
+                  'Rate':Parameter(float, 0.0, 1.0, 1.0)}
+    
     def __init__(self, bits=16, rate=1.0):
         """Decimation effect initiation.
         
@@ -90,6 +91,10 @@ class Decimation(AudioEffect):
             data.replace(i, 2, struct.pack('<h', modified_value))
 
 class FoldbackDistortion(AudioEffect):
+    name = 'Foldback Distortion'
+    description = ''
+    parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
+    
     def __init__(self, threshold=1.0):
         """Foldback distortion effect initialization.
         
@@ -98,12 +103,6 @@ class FoldbackDistortion(AudioEffect):
                 maximum allowed value to clip.
         """
         super(FoldbackDistortion, self).__init__()
->>>>>>> Added Decimation(BitCrush) effect and comments
-        
-class FoldbackDistortion(AudioEffect):
-    name = 'Foldback Distortion'
-    description = ''
-    parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
     
     def process_data(self, data):
         modified_data = QtCore.QByteArray()
@@ -121,11 +120,10 @@ class FoldbackDistortion(AudioEffect):
         data.setRawData(str(modified_data), modified_data.size())
 
 class Gain(AudioEffect):
-<<<<<<< HEAD
     name = 'Gain'
     description = 'Increase the volume, clipping loud signals'
     parameters = {'Amount':Parameter(float, 0, 10, 1)}
-=======
+
     def __init__(self, amount=2):
         """Gain effect initialization.
         
@@ -135,9 +133,7 @@ class Gain(AudioEffect):
                 maximum.
         """
         super(Gain, self).__init__()
-        
         self.amount = amount
->>>>>>> Added Decimation(BitCrush) effect and comments
     
     def process_data(self, data):
         modified_data = QtCore.QByteArray()
@@ -154,10 +150,9 @@ class Passthrough(AudioEffect):
     
     name = 'Passthrough'
     description = 'Does not modify the signal'
-    
     parameters = {'Param 1':Parameter(float, 0, 10, 5),
                   'Param 2':Parameter()}
     
 
 #this tuple needs to be maintained manually
-available_effects = (FoldbackDistortion, Gain, Passthrough)
+available_effects = (Decimation, FoldbackDistortion, Gain, Passthrough)
