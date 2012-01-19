@@ -7,7 +7,7 @@ from PySide import QtCore, QtGui, QtMultimedia
 import effects
 
 class AudioPath(QtCore.QObject):
-    ts = []
+    #ts = [] #for performance timing
     def __init__(self, app):
         super(AudioPath, self).__init__()
         
@@ -44,11 +44,25 @@ class AudioPath(QtCore.QObject):
         self.audio_output.stop()
         
     def on_ready_read(self):
-        data = numpy.fromstring(self.source.readAll(), 'int16')
+        #cast the input data as int32 while it's being processed so that it doesn't get clipped prematurely
+        data = numpy.fromstring(self.source.readAll(), 'int16').astype(int)
+        
+        #t1 = time.clock() #for performance timing
+        
         for effect in self.effects:
-            if len(data):
+            if len(data): #empty arrays cause a crash
                 data = effect.process_data(data)
-        self.sink.write(data.tostring())
+                
+        ###
+        ##performance timing
+        #t2 = time.clock() 
+        #self.ts.append(t2-t1)
+        #if len(self.ts) % 100 == 0:
+        #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+        #    self.ts = []
+        ###
+        
+        self.sink.write(data.clip(effects.SAMPLE_MIN, effects.SAMPLE_MAX).astype('int16').tostring())
 
 class FlowLayout(QtGui.QLayout):
     """Flow layout taken from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
@@ -149,19 +163,13 @@ class EffectWidget(QtGui.QFrame):
         super(EffectWidget, self).__init__()
         self.effect = effect
         
-        self.setObjectName('outer_frame')
-        self.setStyleSheet('''
-            #outer_frame {
-                border-style:outset;
-                border-width:1px;
-                border-color:gray;
-                border-radius:8px;
-            }
-                           ''')
+        self.setObjectName('effect_frame')
         self.layout = QtGui.QGridLayout()
         self.setLayout(self.layout)
         
         self.label = QtGui.QLabel(effect.name)
+        self.label.setObjectName('effect_label')
+        
         self.layout.addWidget(self.label, 0, 0, max((1, len(self.effect.parameters)-1)), 0, QtCore.Qt.AlignHCenter)
         
         for column, (name, param) in enumerate(self.effect.parameters.iteritems()):
@@ -187,12 +195,24 @@ class EffectWidget(QtGui.QFrame):
         
 
 class FluxWindow(QtGui.QMainWindow):
+    style_sheet = '''
+        #effect_frame {
+                border-style:outset;
+                border-width:1px;
+                border-color:gray;
+                border-radius:8px;
+            }
+        #effect_label {
+            font-weight:bold;
+        }
+    '''
     def __init__(self, app):
         super(FluxWindow, self).__init__()
         
         self.app = app
         self.audio_path = AudioPath(app)
         
+        self.setStyleSheet(self.style_sheet)
         #create a dock widget and populate it with available effects
         self.effect_dock = QtGui.QDockWidget('Available Effects')
         self.effect_list = QtGui.QListWidget()

@@ -2,7 +2,7 @@
 
 import struct
 import math
-import numpy
+import numpy as np
 
 from PySide import QtCore, QtGui, QtMultimedia
 
@@ -36,7 +36,7 @@ class AudioEffect(QtCore.QObject):
     parameters = {}
     
     def process_data(self, data):
-        """Modify a numpy.aray and return the modified array.
+        """Modify a np.aray and return the modified array.
         
         This is an abstract method to represent data processing. Override this
         function when subclassing AudioEffect.
@@ -79,22 +79,21 @@ class Decimation(AudioEffect):
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
     Parameters:
-        threshold -- A factor from 0.0 to 1.0 representing the percentage of
-                        maximum allowed value to clip.
+        threshold -- A factor from 0 to SAMPLE_MAX representing the 
+                     maximum allowed value before the signal is clipped.
     """
     name = 'Foldback Distortion'
     description = ''
-    parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
+    parameters = {'Threshold':Parameter(int, 100, SAMPLE_MAX, SAMPLE_MAX)}
     
     def process_data(self, data):
-        def func(value, threshold):
-            if value > threshold or value < -threshold:
-                value = math.floor(math.fabs(math.fabs(math.fmod(
-                        value - threshold, threshold * 4)) -
-                        threshold * 2) - threshold)
-            return value
-        #it would probably be faster to use numpy.piecewise
-        return numpy.vectorize(func, otypes=['int16'])(data, self.parameters['Threshold'].value)
+        threshold=self.parameters['Threshold'].value
+        def func(value, threshold=threshold):
+            return int(math.fabs(math.fabs(math.fmod(
+                    value - threshold, threshold * 4)) -
+                    threshold * 2) - threshold)
+        vec = np.vectorize(func)
+        return np.piecewise(data, [data < -threshold, data > threshold], [vec, vec, lambda x: x])
 
 class Gain(AudioEffect):
     """Gain effect
@@ -109,10 +108,7 @@ class Gain(AudioEffect):
     parameters = {'Amount':Parameter(float, 0, 10, 1)}
     
     def process_data(self, data):
-        def func(value, amount):
-            return value * amount
-        #TODO: make this use numpy.multipy then truncate the value or cast them at int16
-        return numpy.vectorize(func, otypes=['int16'])(data, self.parameters['Amount'].value)
+        return np.multiply(data, self.parameters['Amount'].value)
 
 class Passthrough(AudioEffect):
     """An effect for testing"""
