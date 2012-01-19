@@ -36,7 +36,7 @@ class AudioEffect(QtCore.QObject):
     parameters = {}
     
     def process_data(self, data):
-        """Modify a np.aray and return the modified array.
+        """Modify a numpy.aray and return the modified array.
         
         This is an abstract method to represent data processing. Override this
         function when subclassing AudioEffect.
@@ -84,7 +84,7 @@ class FoldbackDistortion(AudioEffect):
     """
     name = 'Foldback Distortion'
     description = ''
-    parameters = {'Threshold':Parameter(int, 100, SAMPLE_MAX, SAMPLE_MAX)}
+    parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
     
     def process_data(self, data):
         threshold=self.parameters['Threshold'].value
