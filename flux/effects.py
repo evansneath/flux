@@ -32,8 +32,10 @@ class AudioEffect(QtCore.QObject):
     name = 'Unknown Effect'
     description = ''
     
-    """A dictionary of str(param_name):Parameter items that describes all parameters that a user can alter."""
-    parameters = {}
+    def __init__(self):
+        """parameters -- A dictionary of str(param_name):Parameter items that describes all parameters that a user can alter."""
+        super(AudioEffect, self).__init__()
+        self.parameters = {}
     
     def process_data(self, data):
         """Modify a numpy.aray and return the modified array.
@@ -41,7 +43,7 @@ class AudioEffect(QtCore.QObject):
         This is an abstract method to represent data processing. Override this
         function when subclassing AudioEffect.
         """
-        pass
+        return data
 
 class Decimation(AudioEffect):
     """Decimation / Bitcrushing effect.
@@ -52,29 +54,19 @@ class Decimation(AudioEffect):
     """
     name = 'Decimation'
     description = 'Reduce signal sample rate and/or bit accuracy'
-    parameters = {'Bits':Parameter(int, 8, 16, 16),
-                  'Rate':Parameter(float, 0.0, 1.0, 1.0)}
     
-    def __init__(self, bits=16, rate=1.0):
-        
+    def __init__(self):
         super(Decimation, self).__init__()
         
-        self.bits = bits
-        self.rate = rate
-        self.shifted_bits = 1 << (bits - 1)
-        self.count = 0
+        self.parameters = {'Bitrate reduction':Parameter(int, 0, 16, 0),
+                           'Sample rate reduction':Parameter(int, 1, 10, 1)}
     
     def process_data(self, data):
-        for i in xrange(0, len(data), 2):
-            value = struct.unpack('<h', data[i:i+2])[0]
-            modified_value = 0
-            
-            self.count += self.rate
-            if self.count >= 1:
-                self.count -= 1
-                modified_value = value * self.shifted_bits / self.shifted_bits
-            
-            data.replace(i, 2, struct.pack('<h', modified_value))
+        shift_amount = self.parameters['Bitrate reduction'].value
+        data = np.left_shift(np.right_shift(data, shift_amount), shift_amount)
+        reduc_amount = self.parameters['Sample rate reduction'].value
+        #there's probably a more fine-grained way to reduce the sample rate
+        return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)]
 
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
@@ -84,7 +76,10 @@ class FoldbackDistortion(AudioEffect):
     """
     name = 'Foldback Distortion'
     description = ''
-    parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
+    
+    def __init__(self):
+        super(FoldbackDistortion, self).__init__()
+        self.parameters = {'Threshold':Parameter(int, 1, SAMPLE_MAX, SAMPLE_MAX)}
     
     def process_data(self, data):
         threshold=self.parameters['Threshold'].value
@@ -105,7 +100,10 @@ class Gain(AudioEffect):
     """
     name = 'Gain'
     description = 'Increase the volume, clipping loud signals'
-    parameters = {'Amount':Parameter(float, 0, 10, 1)}
+    
+    def __init__(self):
+        super(Gain, self).__init__()
+        self.parameters = {'Amount':Parameter(float, 0, 10, 1)}
     
     def process_data(self, data):
         return np.multiply(data, self.parameters['Amount'].value)
@@ -115,8 +113,11 @@ class Passthrough(AudioEffect):
     
     name = 'Passthrough'
     description = 'Does not modify the signal'
-    parameters = {'Param 1':Parameter(float, 0, 10, 5),
-                  'Param 2':Parameter()}
+    
+    def __init__(self):
+        super(Passthrough, self).__init__()
+        self.parameters = {'Param 1':Parameter(float, 0, 10, 5),
+                           'Param 2':Parameter()}
     
 
 #this tuple needs to be maintained manually

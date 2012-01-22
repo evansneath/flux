@@ -157,6 +157,22 @@ class FluxCentralWidget(QtGui.QWidget):
         self.layout = FlowLayout(self, 5)
         self.setLayout(self.layout)
         
+class EffectWidgetTitleBar(QtGui.QFrame):
+    def __init__(self, title):
+        super(EffectWidgetTitleBar, self).__init__()
+        self.layout = QtGui.QHBoxLayout()
+        self.setLayout(self.layout)
+        
+        self.label = QtGui.QLabel(title, parent=self)
+        self.layout.addWidget(self.label, alignment=QtCore.Qt.AlignLeft)
+        
+        style = app.style()
+        close_icon = style.standardIcon(QtGui.QStyle.SP_TitleBarCloseButton)
+        self.exit_btn = QtGui.QPushButton(close_icon, '')
+        self.exit_btn.setObjectName('effect_exit_btn')
+        self.exit_btn.setFlat(True)
+        self.layout.addWidget(self.exit_btn, alignment=QtCore.Qt.AlignRight)
+        
 class EffectWidget(QtGui.QFrame):
     _slider_max = 99.0
     def __init__(self, effect):
@@ -167,14 +183,14 @@ class EffectWidget(QtGui.QFrame):
         self.layout = QtGui.QGridLayout()
         self.setLayout(self.layout)
         
-        self.label = QtGui.QLabel(effect.name)
-        self.label.setObjectName('effect_label')
+        self.title_bar = EffectWidgetTitleBar(effect.name)
+        self.title_bar.setObjectName('effect_titlebar')
+        self.layout.addWidget(self.title_bar, 0, 0, max((1, len(self.effect.parameters)-1)), 0)
         
-        self.layout.addWidget(self.label, 0, 0, max((1, len(self.effect.parameters)-1)), 0, QtCore.Qt.AlignHCenter)
         
         for column, (name, param) in enumerate(self.effect.parameters.iteritems()):
             label = QtGui.QLabel(name, self)
-            self.layout.addWidget(label, 1, column, QtCore.Qt.AlignHCenter)
+            self.layout.addWidget(label, 2, column, QtCore.Qt.AlignHCenter)
             
             slider = QtGui.QSlider(self)
             slider.setMinimum(0)
@@ -184,26 +200,36 @@ class EffectWidget(QtGui.QFrame):
             slider.setTickPosition(QtGui.QSlider.TicksBothSides)
             slider.setOrientation(QtCore.Qt.Vertical)
             slider.valueChanged.connect(self.create_slider_slot(param))
-            self.layout.addWidget(slider, 2, column, QtCore.Qt.AlignHCenter)
+            self.layout.addWidget(slider, 3, column, QtCore.Qt.AlignHCenter)
             
     def create_slider_slot(self, param):
         def update_paramater(value):
             ratio = value / EffectWidget._slider_max
             param.value = param.type(ratio * (param.maximum - param.minimum) + param.minimum)
         return update_paramater
-            
-        
-
+    
+                
 class FluxWindow(QtGui.QMainWindow):
     style_sheet = '''
-        #effect_frame {
-                border-style:outset;
-                border-width:1px;
-                border-color:gray;
-                border-radius:8px;
-            }
-        #effect_label {
+        #effect_titlebar {
+            margin:-8px;
+        }
+        #effect_titlebar QLabel {
             font-weight:bold;
+        }
+        #effect_frame {
+            border-style:outset;
+            border-width:1px;
+            border-color:gray;
+            border-radius:8px;
+            padding:-6px;
+            background:qlineargradient(x1:.4, y1:0, x2:.5, y2:1,
+                stop:0 transparent, stop:0.2 #dddddd, stop:1 transparent);
+        }
+        #effect_exit_btn {
+            max-width:1.2em;
+            max-height:1.2em;
+            text-align:center;
         }
     '''
     def __init__(self, app):
@@ -262,9 +288,18 @@ class FluxWindow(QtGui.QMainWindow):
             if effect_class.name == list_item.text():
                 effect = effect_class()
                 self.audio_path.effects.append(effect)
-                self.central_widget.layout.addWidget(EffectWidget(effect))
+                widget = EffectWidget(effect)
+                self.central_widget.layout.addWidget(widget)
+                widget.title_bar.exit_btn.pressed.connect(lambda: self.remove_effect_widget(widget))
                 return
-                
+            
+    def remove_effect_widget(self, widget):
+        self.central_widget.layout.removeWidget(widget)
+        widget.hide()
+        try:
+            self.audio_path.effects.remove(widget.effect)
+        except ValueError as err:
+            print 'Info: effect already removed'
         
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
