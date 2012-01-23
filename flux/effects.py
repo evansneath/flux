@@ -68,14 +68,24 @@ class Decimation(AudioEffect):
         #there's probably a more fine-grained way to reduce the sample rate
         return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)]
 
+class Equalization(AudioEffect):
+    """Equalization effect
+    """
+    name = 'Equalization'
+    description = 'Equalization with a built-in bandpass filter'
+    
+    def __init__(self):
+        super(Equalization, self).__init__()
+
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
+    
     Parameters:
         threshold -- A factor from 0 to SAMPLE_MAX representing the 
                      maximum allowed value before the signal is clipped.
     """
     name = 'Foldback Distortion'
-    description = ''
+    description = 'A rudimentary distortion utilizing a threshold amplitude.'
     
     def __init__(self):
         super(FoldbackDistortion, self).__init__()
@@ -153,7 +163,7 @@ class PulseModulation(AudioEffect):
             self.mod = np.concatenate([np.ones(active_samples),
                                         np.zeros(inactive_samples)])
         else:
-            np.roll(self.mod, -self.old_data_size)
+            self.mod = np.roll(self.mod, -self.old_data_size)
         
         self.old_data_size = data.size
         return np.multiply(data, np.resize(self.mod, (1, data.size)))
