@@ -143,30 +143,30 @@ class PulseModulation(AudioEffect):
         super(PulseModulation, self).__init__()
         self.parameters = {'Duration':Parameter(float, 0.0, 1.0, 0.25),
                            'Duty':Parameter(float, 0.0, 1.0, 0.5)}
-        self.old_duration = 0.0
-        self.old_duty = 0.0
-        self.old_data_size = 0
-        self.mod = np.array([])
+        self._old_duration = 0.0
+        self._old_duty = 0.0
+        self._old_data_size = 0
+        self._mod = np.array([])
     
     def process_data(self, data):
         duration = self.parameters['Duration'].value
         duty = self.parameters['Duty'].value
         
-        if (self.old_duration != duration or self.old_duty != duty):
+        if (self._old_duration != duration or self._old_duty != duty):
             total_samples = duration * SAMPLE_RATE
             active_samples = math.floor(total_samples * duty)
             inactive_samples = total_samples - active_samples
             
-            self.old_duration = duration
-            self.old_duty = duty
+            self._old_duration = duration
+            self._old_duty = duty
             
-            self.mod = np.concatenate([np.ones(active_samples),
+            self._mod = np.concatenate([np.ones(active_samples),
                                         np.zeros(inactive_samples)])
         else:
-            self.mod = np.roll(self.mod, -self.old_data_size)
+            self._mod = np.roll(self._mod, -self._old_data_size)
         
-        self.old_data_size = data.size
-        return np.multiply(data, np.resize(self.mod, (1, data.size)))
+        self._old_data_size = data.size
+        return np.multiply(data, np.resize(self._mod, (1, data.size)))
 
 #this tuple needs to be maintained manually
 available_effects = (Decimation, FoldbackDistortion, Gain, Passthrough, PulseModulation)
