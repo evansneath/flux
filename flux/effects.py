@@ -2,6 +2,8 @@
 
 import struct
 import math
+import time
+
 import numpy as np
 
 from PySide import QtCore, QtGui, QtMultimedia
@@ -9,6 +11,70 @@ from PySide import QtCore, QtGui, QtMultimedia
 SAMPLE_MAX = 32767
 SAMPLE_MIN = -(SAMPLE_MAX + 1)
 SAMPLE_RATE = 44100 # [Hz]
+
+class AudioPath(QtCore.QObject):
+    """Class that handles audio input and output and applying effects.
+    
+    Parameters:
+    app -- a QApplication or QCoreApplication
+    """
+    ts = [] #for performance timing
+    def __init__(self, app):
+        super(AudioPath, self).__init__()
+        
+        info = QtMultimedia.QAudioDeviceInfo.defaultInputDevice()
+        format = info.preferredFormat()
+        format.setChannels(1)
+        format.setChannelCount(1)
+        format.setSampleSize(16)
+        format.setSampleRate(44100)
+        
+        if not info.isFormatSupported(format):
+            print 'Format not supported, using nearest available'
+            format = nearestFormat(format)
+            if format.sampleSize != 16:
+                #this is important, since effects assume this sample size.
+                raise RuntimeError('16-bit sample size not supported!')
+        
+        self.audio_input = QtMultimedia.QAudioInput(format, app)
+        self.audio_output = QtMultimedia.QAudioOutput(format)
+        
+        self.source = None
+        self.sink = None
+        
+        self.effects = []
+        
+    def start(self):
+        self.source = self.audio_input.start()
+        self.sink = self.audio_output.start()
+        
+        self.source.readyRead.connect(self.on_ready_read)
+        
+    def stop(self):
+        self.audio_input.stop()
+        self.audio_output.stop()
+        
+    def on_ready_read(self):
+        #cast the input data as int32 while it's being processed so that it doesn't get clipped prematurely
+        data = np.fromstring(self.source.readAll(), 'int16').astype(int)
+        
+        #t1 = time.clock() #for performance timing
+        
+        for effect in self.effects:
+            if len(data): #empty arrays cause a crash
+                data = effect.process_data(data)
+                
+        ###
+        ##performance timing
+        #t2 = time.clock() 
+        #self.ts.append(t2-t1)
+        #if len(self.ts) % 100 == 0:
+        #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+        #    self.ts = []
+        ###
+        
+        self.sink.write(data.clip(SAMPLE_MIN, SAMPLE_MAX).astype('int16').tostring())
+
 
 class Parameter(QtCore.QObject):
     """A description of an effect parameter.
@@ -68,15 +134,6 @@ class Decimation(AudioEffect):
         #there's probably a more fine-grained way to reduce the sample rate
         return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)]
 
-class Equalization(AudioEffect):
-    """Equalization effect
-    """
-    name = 'Equalization'
-    description = 'Equalization with a built-in bandpass filter'
-    
-    def __init__(self):
-        super(Equalization, self).__init__()
-
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
     
@@ -116,7 +173,7 @@ class Gain(AudioEffect):
         self.parameters = {'Amount':Parameter(float, 0, 10, 1)}
     
     def process_data(self, data):
-        return np.multiply(data, self.parameters['Amount'].value)
+        return np.multiply(data, self.parameters['Amount'].value).astype(int)
 
 class Passthrough(AudioEffect):
     """An effect for testing"""

@@ -6,64 +6,6 @@ from PySide import QtCore, QtGui, QtMultimedia
 
 import effects
 
-class AudioPath(QtCore.QObject):
-    #ts = [] #for performance timing
-    def __init__(self, app):
-        super(AudioPath, self).__init__()
-        
-        info = QtMultimedia.QAudioDeviceInfo.defaultInputDevice()
-        format = info.preferredFormat()
-        format.setChannels(1)
-        format.setChannelCount(1)
-        format.setSampleSize(16)
-        format.setSampleRate(44100)
-        
-        if not info.isFormatSupported(format):
-            print 'Format not supported, using nearest available'
-            format = nearestFormat(format)
-            if format.sampleSize != 16:
-                #this is important, since effects assume this sample size.
-                raise RuntimeError('16-bit sample size not supported!')
-        
-        self.audio_input = QtMultimedia.QAudioInput(format, app)
-        self.audio_output = QtMultimedia.QAudioOutput(format)
-        
-        self.source = None
-        self.sink = None
-        
-        self.effects = []
-        
-    def start(self):
-        self.source = self.audio_input.start()
-        self.sink = self.audio_output.start()
-        
-        self.source.readyRead.connect(self.on_ready_read)
-        
-    def stop(self):
-        self.audio_input.stop()
-        self.audio_output.stop()
-        
-    def on_ready_read(self):
-        #cast the input data as int32 while it's being processed so that it doesn't get clipped prematurely
-        data = numpy.fromstring(self.source.readAll(), 'int16').astype(int)
-        
-        #t1 = time.clock() #for performance timing
-        
-        for effect in self.effects:
-            if len(data): #empty arrays cause a crash
-                data = effect.process_data(data)
-                
-        ###
-        ##performance timing
-        #t2 = time.clock() 
-        #self.ts.append(t2-t1)
-        #if len(self.ts) % 100 == 0:
-        #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-        #    self.ts = []
-        ###
-        
-        self.sink.write(data.clip(effects.SAMPLE_MIN, effects.SAMPLE_MAX).astype('int16').tostring())
-
 class FlowLayout(QtGui.QLayout):
     """Flow layout taken from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
     def __init__(self, parent=None, margin=0, spacing=-1):
@@ -150,12 +92,68 @@ class FlowLayout(QtGui.QLayout):
 
         return y + lineHeight - rect.y()
         
-class FluxCentralWidget(QtGui.QWidget):
+        
+class FluxCentralWidget(QtGui.QTabWidget):
     def __init__(self):
         super(FluxCentralWidget, self).__init__()
         
-        self.layout = FlowLayout(self, 5)
-        self.setLayout(self.layout)
+        #self.setDocumentMode(True)
+        
+        self.add_tab_button = QtGui.QPushButton(QtGui.QIcon('res/icons/tab_add.png'), '')
+        self.add_tab_button.pressed.connect(self.add_tab)
+        self.add_tab_button.setObjectName('add_tab_button')
+        
+        self.setCornerWidget(self.add_tab_button, QtCore.Qt.BottomRightCorner)
+        
+        self.tabCloseRequested.connect(self.remove_tab)
+        
+        self.add_tab()
+    
+    def add_tab(self):
+        tab = QtGui.QWidget()
+        tab.layout = FlowLayout(self, 5)
+        tab.setLayout(tab.layout)
+        
+        title = 'Preset %i' % (self.count() + 1)
+        self.addTab(tab, title)
+        self.setCurrentIndex(self.count() - 1)
+        
+    def remove_tab(self, index):
+        self.removeTab(index)
+        if self.count() == 0:
+            self.add_tab()
+            
+    def select_next_tab(self):
+        if self.count():
+            self.setCurrentIndex((self.currentIndex() + 1) % self.count())
+            
+    def select_prev_tab(self):
+        if self.count():
+            if self.currentIndex() > 0:
+                self.setCurrentIndex((self.currentIndex() - 1))
+            else:
+                self.setCurrentIndex(self.count() - 1)
+                
+    def rename_tab(self):
+        print self.count()
+        if self.count():
+            text, ok = QtGui.QInputDialog.getText(self, 'Rename preset', 'Name:',
+                                QtGui.QLineEdit.Normal, self.tabText(self.currentIndex()))
+            if ok and text:
+                self.setTabText(self.currentIndex(), text)
+        
+    def add_widget(self, widget):
+        if self.count():
+            self.currentWidget().layout.addWidget(widget)
+        else:
+            print "Warning: can't add widget if there are no tabs"
+        
+    def remove_widget(self, widget):
+        if self.count():
+            self.currentWidget().layout.removeWidget(widget)
+        else:
+            print "Warning: can't remove widget if there are no tabs"
+            
         
 class EffectWidgetTitleBar(QtGui.QFrame):
     def __init__(self, title):
@@ -167,7 +165,7 @@ class EffectWidgetTitleBar(QtGui.QFrame):
         self.layout.addWidget(self.label, alignment=QtCore.Qt.AlignLeft)
         
         style = app.style()
-        close_icon = style.standardIcon(QtGui.QStyle.SP_TitleBarCloseButton)
+        close_icon = QtGui.QIcon('res/icons/tab_close_hover.png')
         self.exit_btn = QtGui.QPushButton(close_icon, '')
         self.exit_btn.setObjectName('effect_exit_btn')
         self.exit_btn.setFlat(True)
@@ -210,35 +208,15 @@ class EffectWidget(QtGui.QFrame):
     
                 
 class FluxWindow(QtGui.QMainWindow):
-    style_sheet = '''
-        #effect_titlebar {
-            margin:-8px;
-        }
-        #effect_titlebar QLabel {
-            font-weight:bold;
-        }
-        #effect_frame {
-            border-style:outset;
-            border-width:1px;
-            border-color:gray;
-            border-radius:8px;
-            padding:-6px;
-            background:qlineargradient(x1:.4, y1:0, x2:.5, y2:1,
-                stop:0 transparent, stop:0.2 #dddddd, stop:1 transparent);
-        }
-        #effect_exit_btn {
-            max-width:1.2em;
-            max-height:1.2em;
-            text-align:center;
-        }
-    '''
     def __init__(self, app):
         super(FluxWindow, self).__init__()
         
         self.app = app
-        self.audio_path = AudioPath(app)
+        self.audio_path = effects.AudioPath(app)
         
-        self.setStyleSheet(self.style_sheet)
+        with open('res/stylesheet.qss') as style_sheet:
+            self.setStyleSheet(style_sheet.read())
+            
         #create a dock widget and populate it with available effects
         self.effect_dock = QtGui.QDockWidget('Available Effects')
         self.effect_list = QtGui.QListWidget()
@@ -257,22 +235,26 @@ class FluxWindow(QtGui.QMainWindow):
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.effect_dock)
         
         #create the top toolbar
-        style = app.style()
         self.toolbar = QtGui.QToolBar()
         self.toolbar.setFloatable(False)
         self.toolbar.setMovable(False)
         
-        play_icon = style.standardIcon(QtGui.QStyle.SP_MediaPlay)
-        self.toolbar.addAction(play_icon, 'Play', self.play_btn_action)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/control_play.png'), 'Play', self.play_btn_action)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/control_pause.png'), 'Pause', self.pause_btn_action)
+        self.toolbar.addSeparator()
+        self.toolbar.addAction(QtGui.QIcon('res/icons/tab_left.png'), 'Next Preset', self.tab_left_action)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/tab_right.png'), 'Previous Preset', self.tab_right_action)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/tab_edit.png'), 'Rename Preset', self.rename_tab_action)
         
-        pause_icon = style.standardIcon(QtGui.QStyle.SP_MediaPause)
-        self.toolbar.addAction(pause_icon, 'Pause', self.pause_btn_action)
         
         self.addToolBar(self.toolbar)
         
         #create the central widget
         self.central_widget = FluxCentralWidget()
+        self.central_widget.setMovable(True)
+        self.central_widget.setTabsClosable (True)
         self.setCentralWidget(self.central_widget)
+        self.central_widget.currentChanged.connect(self.update_audio_path)
         
     def sizeHint(self):
         return QtCore.QSize(600, 400)
@@ -283,23 +265,40 @@ class FluxWindow(QtGui.QMainWindow):
     def pause_btn_action(self):
         self.audio_path.stop()
         
+    def add_tab_action(self):
+        self.central_widget.add_tab()
+        
+    def tab_left_action(self):
+        self.central_widget.select_prev_tab()
+    
+    def tab_right_action(self):
+        self.central_widget.select_next_tab()
+        
+    def rename_tab_action(self):
+        self.central_widget.rename_tab()
+        
     def effect_list_item_selected(self, list_item):
         for effect_class in effects.available_effects:
             if effect_class.name == list_item.text():
                 effect = effect_class()
                 self.audio_path.effects.append(effect)
                 widget = EffectWidget(effect)
-                self.central_widget.layout.addWidget(widget)
+                self.central_widget.add_widget(widget)
                 widget.title_bar.exit_btn.pressed.connect(lambda: self.remove_effect_widget(widget))
                 return
             
     def remove_effect_widget(self, widget):
-        self.central_widget.layout.removeWidget(widget)
+        self.central_widget.remove_widget(widget)
         widget.hide()
         try:
             self.audio_path.effects.remove(widget.effect)
         except ValueError as err:
             print 'Info: effect already removed'
+            
+    def update_audio_path(self, index):
+        if index >= 0:
+            panel = self.central_widget.currentWidget()
+            self.audio_path.effects = [i.widget().effect for i in panel.layout.itemList]
         
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
