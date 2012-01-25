@@ -1,0 +1,65 @@
+/***
+ *QSS style sheet for flux application
+ ***/
+
+/* some basic styling to use once the layout is complete
+QMainWindow {
+    background: #4f4f4f;
+    color: white;
+}
+QToolBar {
+    background: qlineargradient(x1: .5, y1: 0, x2: .5, y2: 1,
+        stop: 0 #eeeeee, stop: 1 #d6d6d6);
+}
+QDockWidget::title {
+    text-align: left;
+    background: qlineargradient(x1: .5, y1: 0, x2: .5, y2: 1,
+        stop: 0 #787878, stop: 1 #434343);
+    padding-left: 5px;
+    color: white;
+    font-weight:bold;
+}
+
+QMainWindow::separator {
+    background: #313131;
+    width: 1px;
+    height: 1px;
+}
+QListView {
+    background: #4f4f4f;
+    color: white;
+    font-weight: bold;
+}
+*/
+
+QTabBar::close-button {
+    image: url(res/icons/tab_close.png)
+}
+QTabBar::close-button:hover {
+    image: url(res/icons/tab_close_hover.png)
+}
+#add_tab_button {
+    padding:3px;
+    margin-bottom:-4px;
+    margin-right:1px;
+}
+#effect_titlebar {
+    margin: -8px;
+}
+#effect_titlebar QLabel {
+    font-weight: bold;
+}
+#effect_frame {
+    border-style: outset;
+    border-width: 1px;
+    border-color: gray;
+    border-radius: 8px;
+    padding: -6px;
+    background: qlineargradient(x1: .4, y1: 0, x2: .5, y2: 1,
+        stop: 0 transparent, stop: 0.2 #dddddd, stop: 1 transparent);
+}
+#effect_exit_btn {
+    max-width: 1.2em;
+    max-height: 1.2em;
+    text-align: center;
+}

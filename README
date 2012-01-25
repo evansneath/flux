@@ -1,0 +1,20 @@
+Flux version 0.1a
+
+A dynamic, real-time system for the emulation of various audio effects.
+
+To run the Flux processing, simply execute the following code in flux/:
+    python main.py
+    
+Contributers:
+    Evan Sneath (https://github.com/evansneath)
+    AJ Alt (https://github.com/Narcoeli)
+    Paul Musgrave (https://github.com/pmusgrave)
+
+More project documentation available on the project wiki:
+    https://github.com/evansneath/flux/wiki
+
+This software licensed under the Open Software License version 3.0:
+    http://www.opensource.org/licenses/OSL-3.0
+    
+This software uses assets modified from the Silk Icon Set, originally created by Mark James:
+    http://www.famfamfam.com/lab/icons/silk/
