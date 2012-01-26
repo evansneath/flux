@@ -11,6 +11,8 @@ from PySide import QtCore, QtGui, QtMultimedia
 SAMPLE_MAX = 32767
 SAMPLE_MIN = -(SAMPLE_MAX + 1)
 SAMPLE_RATE = 44100 # [Hz]
+SAMPLE_SIZE = 16 # [bit]
+CHANNEL_COUNT = 1
 
 class AudioPath(QtCore.QObject):
     """Class that handles audio input and output and applying effects.
@@ -24,15 +26,15 @@ class AudioPath(QtCore.QObject):
         
         info = QtMultimedia.QAudioDeviceInfo.defaultInputDevice()
         format = info.preferredFormat()
-        format.setChannels(1)
-        format.setChannelCount(1)
-        format.setSampleSize(16)
-        format.setSampleRate(44100)
+        format.setChannels(CHANNEL_COUNT)
+        format.setChannelCount(CHANNEL_COUNT)
+        format.setSampleSize(SAMPLE_SIZE)
+        format.setSampleRate(SAMPLE_RATE)
         
         if not info.isFormatSupported(format):
             print 'Format not supported, using nearest available'
             format = nearestFormat(format)
-            if format.sampleSize != 16:
+            if format.sampleSize != SAMPLE_SIZE:
                 #this is important, since effects assume this sample size.
                 raise RuntimeError('16-bit sample size not supported!')
         
@@ -124,7 +126,7 @@ class Decimation(AudioEffect):
     
     def __init__(self):
         super(Decimation, self).__init__()
-        self.parameters = {'Bitrate reduction':Parameter(int, 0, 16, 0),
+        self.parameters = {'Bitrate reduction':Parameter(int, 0, SAMPLE_SIZE, 0),
                            'Sample rate reduction':Parameter(int, 1, 10, 1)}
     
     def process_data(self, data):
@@ -133,6 +135,22 @@ class Decimation(AudioEffect):
         reduc_amount = self.parameters['Sample rate reduction'].value
         #there's probably a more fine-grained way to reduce the sample rate
         return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)]
+
+class Equalization(AudioEffect):
+    """Equalization effect
+    """
+    name = 'Equalization'
+    description = ''
+    
+    def __init__(self):
+        super(Equalization, self).__init__()
+        self._delta_f = 1 / SAMPLE_RATE
+    
+    def process_data(self, data):
+        spectrum = np.fft.fft(data * np.hanning(data.size))
+        frequency = np.fft.fftfreq(data.size)
+        
+        return np.fft.ifft(spectrum)
 
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
@@ -226,4 +244,4 @@ class PulseModulation(AudioEffect):
         return np.multiply(data, np.resize(self._mod, (1, data.size)))
 
 #this tuple needs to be maintained manually
-available_effects = (Decimation, FoldbackDistortion, Gain, Passthrough, PulseModulation)
+available_effects = (Equalization, Decimation, FoldbackDistortion, Gain, Passthrough, PulseModulation)
