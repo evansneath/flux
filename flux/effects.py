@@ -77,7 +77,6 @@ class AudioPath(QtCore.QObject):
         
         self.sink.write(data.clip(SAMPLE_MIN, SAMPLE_MAX).astype('int16').tostring())
 
-
 class Parameter(QtCore.QObject):
     """A description of an effect parameter.
     
@@ -193,6 +192,22 @@ class Gain(AudioEffect):
     def process_data(self, data):
         return np.multiply(data, self.parameters['Amount'].value).astype(int)
 
+class GenericFilter(AudioEffect):
+    """An effect for testing FFT"""
+    name = 'GenericFilter'
+    description = 'Testing fft and filtering'
+
+    def __init__(self):
+        super(GenericFilter, self).__init__()
+        self.parameters = {'Amount':Parameter(float, 0, 10, 1)}
+        
+    def process_data(self, data):
+        modified_data = np.fft.rfft(data)
+        freq = np.fft.fftfreq(modified_data.size)
+        H = np.divide(1,1 + np.multiply(self.parameters['Amount'].value,freq))
+        
+        return np.fft.irfft(np.multiply(modified_data,H))
+    
 class Passthrough(AudioEffect):
     """An effect for testing"""
     
@@ -244,4 +259,4 @@ class PulseModulation(AudioEffect):
         return np.multiply(data, np.resize(self._mod, (1, data.size)))
 
 #this tuple needs to be maintained manually
-available_effects = (Equalization, Decimation, FoldbackDistortion, Gain, Passthrough, PulseModulation)
+available_effects = (Equalization, Decimation, FoldbackDistortion, Gain, GenericFilter, Passthrough, PulseModulation)
