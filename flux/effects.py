@@ -60,20 +60,29 @@ class AudioPath(QtCore.QObject):
         #cast the input data as int32 while it's being processed so that it doesn't get clipped prematurely
         data = np.fromstring(self.source.readAll(), 'int16').astype(int)
         
-        #t1 = time.clock() #for performance timing
+        """
+        t1 = time.clock() #for performance timing
+        """
         
-        for effect in self.effects:
-            if len(data): #empty arrays cause a crash
+        if len(data):
+            for effect in self.effects:
                 data = effect.process_data(data)
-                
-        ###
-        ##performance timing
-        #t2 = time.clock() 
-        #self.ts.append(t2-t1)
-        #if len(self.ts) % 100 == 0:
-        #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-        #    self.ts = []
-        ###
+            
+            magn_data = np.fft.rfft(data)
+            freq_data = np.fft.fftfreq(magn_data.size, d=1.0)
+            
+            for effect in self.effects:
+                magn_data = effect.process_spectrum(magn_data, freq_data)
+            
+            data = np.fft.irfft(magn_data)
+        
+        """
+        t2 = time.clock() 
+        self.ts.append(t2-t1)
+        if len(self.ts) % 100 == 0:
+            print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+            self.ts = []
+        """
         
         self.sink.write(data.clip(SAMPLE_MIN, SAMPLE_MAX).astype('int16').tostring())
 
@@ -106,12 +115,21 @@ class AudioEffect(QtCore.QObject):
         self.parameters = {}
     
     def process_data(self, data):
-        """Modify a numpy.aray and return the modified array.
+        """Modify a numpy.array and return the modified array.
         
         This is an abstract method to represent data processing. Override this
         function when subclassing AudioEffect.
         """
         return data
+    
+    def process_spectrum(self, magn_data, freq_data):
+        """Modify the inputted spectrum and return the modified spectrum.
+        
+        This is an abstract method to represent frequency spectrum processing.
+        Override this function when subclassing AudioEffect if spectral
+        processing is desired.
+        """
+        return magn_data
 
 class Decimation(AudioEffect):
     """Decimation / Bitcrushing effect.
@@ -143,13 +161,9 @@ class Equalization(AudioEffect):
     
     def __init__(self):
         super(Equalization, self).__init__()
-        self._delta_f = 1 / SAMPLE_RATE
     
-    def process_data(self, data):
-        spectrum = np.fft.fft(data * np.hanning(data.size))
-        frequency = np.fft.fftfreq(data.size)
-        
-        return np.fft.ifft(spectrum)
+    def process_spectrum(self, magn_data, freq_data):
+        return magn_data
 
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
@@ -201,12 +215,11 @@ class GenericFilter(AudioEffect):
         super(GenericFilter, self).__init__()
         self.parameters = {'Amount':Parameter(float, 0, 10, 1)}
         
-    def process_data(self, data):
-        modified_data = np.fft.rfft(data)
-        freq = np.fft.fftfreq(modified_data.size)
-        H = np.divide(1,1 + np.multiply(self.parameters['Amount'].value,freq))
+    def process_spectrum(self, magn_data, freq_data):
+        filter_value = self.parameters['Amount'].value
+        h = np.divide(1, 1 + np.multiply(filter_value, freq_data))
         
-        return np.fft.irfft(np.multiply(modified_data,H))
+        return np.multiply(magn_data, h)
     
 class Passthrough(AudioEffect):
     """An effect for testing"""
