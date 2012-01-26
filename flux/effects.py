@@ -259,8 +259,4 @@ class PulseModulation(AudioEffect):
         return np.multiply(data, np.resize(self._mod, (1, data.size)))
 
 #this tuple needs to be maintained manually
-<<<<<<< HEAD
 available_effects = (Equalization, Decimation, FoldbackDistortion, Gain, GenericFilter, Passthrough, PulseModulation)
-=======
-available_effects = (Decimation, FoldbackDistortion, Gain, GenericFilter, Passthrough, PulseModulation)
->>>>>>> eb88b0831f7e2bc3759b0c379644be6d68e69963
