@@ -1,5 +1,6 @@
 import sys
 import time
+import collections
 
 import numpy
 from PySide import QtCore, QtGui, QtMultimedia
@@ -200,12 +201,63 @@ class EffectWidget(QtGui.QFrame):
             slider.valueChanged.connect(self.create_slider_slot(param))
             self.layout.addWidget(slider, 3, column, QtCore.Qt.AlignHCenter)
             
+            if isinstance(param, effects.TempoParameter):
+                button = QtGui.QPushButton('use bpm')
+                button.setObjectName('use_bpm_button')
+                button.setCheckable(True)
+                button.toggled.connect(param.set_use_bpm)
+                self.layout.addWidget(button, 4, column, QtCore.Qt.AlignHCenter)
+            
     def create_slider_slot(self, param):
         def update_paramater(value):
             ratio = value / EffectWidget._slider_max
             param.value = param.type(ratio * (param.maximum - param.minimum) + param.minimum)
         return update_paramater
-    
+   
+class TempoWidget(QtGui.QWidget):
+    def __init__(self):
+        super(TempoWidget, self).__init__()
+        
+        self.setObjectName('tempo_widget')
+        
+        self.layout = QtGui.QHBoxLayout()
+        self.setLayout(self.layout)
+        
+        self.icon = QtGui.QLabel()
+        self.icon.setPixmap(QtGui.QPixmap('res/icons/tempo_text.png'))
+        self.layout.addWidget(self.icon)
+        
+        self.bpm_entry = QtGui.QLineEdit()
+        self.bpm_entry.setMaxLength(3)
+        self.bpm_entry.setValidator(QtGui.QIntValidator(1, 999, self.bpm_entry))
+        self.layout.addWidget(self.bpm_entry)
+        
+        #self.button = QtGui.QPushButton(QtGui.QIcon('res/icons/time_go.png'), '')
+        #self.layout.addWidget(self.button)
+        #self.button.pressed.connect(self.update_tempo)
+        
+        self.tempo_times = collections.deque(maxlen=5)
+        
+    def update_tempo(self):
+        t = time.clock()
+        
+        #clear the times if it's been 3 seconds
+        if self.tempo_times and t - self.tempo_times[-1] > 3:
+            self.tempo_times.clear()
+            
+        self.tempo_times.append(t)
+        
+        if len(self.tempo_times) >= 2:
+            it = iter(self.tempo_times)
+            prev = it.next()
+            s = 0
+            for elem in it:
+                s += elem - prev
+                prev = elem
+            interval = s / float(len(self.tempo_times) - 1)
+            self.bpm_entry.setText(str(int(60/interval))) #60/(s per beat) = bpm
+        
+        
                 
 class FluxWindow(QtGui.QMainWindow):
     def __init__(self, app):
@@ -234,18 +286,23 @@ class FluxWindow(QtGui.QMainWindow):
         self.effect_dock.setFeatures(QtGui.QDockWidget.DockWidgetMovable|QtGui.QDockWidget.DockWidgetFloatable)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.effect_dock)
         
+        self.tempo_widget = TempoWidget()
+        
         #create the top toolbar
         self.toolbar = QtGui.QToolBar()
         self.toolbar.setFloatable(False)
         self.toolbar.setMovable(False)
         
         self.toolbar.addAction(QtGui.QIcon('res/icons/control_play.png'), 'Play', self.play_btn_action)
-        self.toolbar.addAction(QtGui.QIcon('res/icons/control_pause.png'), 'Pause', self.pause_btn_action)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/control_pause.png'), 'Bypass Effects', self.pause_btn_action)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/control_stop.png'), 'Stop', self.stop_btn_action)
         self.toolbar.addSeparator()
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_left.png'), 'Next Preset', self.tab_left_action)
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_right.png'), 'Previous Preset', self.tab_right_action)
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_edit.png'), 'Rename Preset', self.rename_tab_action)
-        
+        self.toolbar.addSeparator()
+        self.toolbar.addWidget(self.tempo_widget)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/time_go.png'), 'Tap Tempo', self.tempo_widget.update_tempo)
         
         self.addToolBar(self.toolbar)
         
@@ -263,6 +320,9 @@ class FluxWindow(QtGui.QMainWindow):
         self.audio_path.start()
         
     def pause_btn_action(self):
+        self.audio_path.processing_enabled = False
+        
+    def stop_btn_action(self):
         self.audio_path.stop()
         
     def add_tab_action(self):

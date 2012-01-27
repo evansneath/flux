@@ -13,6 +13,7 @@ SAMPLE_MIN = -(SAMPLE_MAX + 1)
 SAMPLE_RATE = 44100 # [Hz]
 SAMPLE_SIZE = 16 # [bit]
 CHANNEL_COUNT = 1
+BUFFER_SIZE = 2000 #this is the smallest buffer that prevents underruns on my machine
 
 class AudioPath(QtCore.QObject):
     """Class that handles audio input and output and applying effects.
@@ -39,14 +40,19 @@ class AudioPath(QtCore.QObject):
                 raise RuntimeError('16-bit sample size not supported!')
         
         self.audio_input = QtMultimedia.QAudioInput(format, app)
+        self.audio_input.setBufferSize(BUFFER_SIZE)
         self.audio_output = QtMultimedia.QAudioOutput(format)
         
         self.source = None
         self.sink = None
         
+        self.processing_enabled = True
+        
         self.effects = []
         
     def start(self):
+        self.processing_enabled = True
+        
         self.source = self.audio_input.start()
         self.sink = self.audio_output.start()
         
@@ -60,29 +66,21 @@ class AudioPath(QtCore.QObject):
         #cast the input data as int32 while it's being processed so that it doesn't get clipped prematurely
         data = np.fromstring(self.source.readAll(), 'int16').astype(int)
         
-        """
-        t1 = time.clock() #for performance timing
-        """
-        
-        if len(data):
-            for effect in self.effects:
-                data = effect.process_data(data)
-            
-            magn_data = np.fft.rfft(data)
-            freq_data = np.fft.fftfreq(magn_data.size, d=1.0)
+        if self.processing_enabled:
+            #t1 = time.clock() #for performance timing
             
             for effect in self.effects:
-                magn_data = effect.process_spectrum(magn_data, freq_data)
-            
-            data = np.fft.irfft(magn_data)
-        
-        """
-        t2 = time.clock() 
-        self.ts.append(t2-t1)
-        if len(self.ts) % 100 == 0:
-            print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-            self.ts = []
-        """
+                if len(data): #empty arrays cause a crash
+                    data = effect.process_data(data)
+                    
+            ###
+            ##performance timing
+            #t2 = time.clock() 
+            #self.ts.append(t2-t1)
+            #if len(self.ts) % 100 == 0:
+            #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+            #    self.ts = []
+            ###
         
         self.sink.write(data.clip(SAMPLE_MIN, SAMPLE_MAX).astype('int16').tostring())
 
@@ -103,7 +101,38 @@ class Parameter(QtCore.QObject):
         self.minimum = minimum
         self.maximum = maximum
         self.value = value
+        
+class TempoParameter(Parameter):
+    """A Parameter whose value can be overridden by a user supplied tempo, in beats-per-minute.
+    
+    If use_bpm is True, value will be an integer with 0 < value < 1000.
+    Otherwise value will be a value adhering to minumum, maximum and type, as usual.
+    """
+    bpm = 0
+    
+    def __init__(self, type=int, minimum=0, maximum=100, value=10):
+        super(TempoParameter, self).__init__(type, minimum, maximum, value)
+        
+        self._value = value
+        self.use_bpm = False
+    
+    @property
+    def value(self):
+        if self.use_bpm:
+            return self.bpm
+        return self._value
+    
+    @value.setter
+    def value(self, val):
+        self._value = val
 
+    @classmethod
+    def set_bpm(cls, value):
+        cls.bpm = value
+        
+    def set_use_bpm(self, value):
+        self.use_bpm = value
+        
 class AudioEffect(QtCore.QObject):
     """Base class for audio effects."""
     name = 'Unknown Effect'
@@ -121,15 +150,6 @@ class AudioEffect(QtCore.QObject):
         function when subclassing AudioEffect.
         """
         return data
-    
-    def process_spectrum(self, magn_data, freq_data):
-        """Modify the inputted spectrum and return the modified spectrum.
-        
-        This is an abstract method to represent frequency spectrum processing.
-        Override this function when subclassing AudioEffect if spectral
-        processing is desired.
-        """
-        return magn_data
 
 class Decimation(AudioEffect):
     """Decimation / Bitcrushing effect.
@@ -144,11 +164,11 @@ class Decimation(AudioEffect):
     def __init__(self):
         super(Decimation, self).__init__()
         self.parameters = {'Bitrate reduction':Parameter(int, 0, SAMPLE_SIZE, 0),
-                           'Sample rate reduction':Parameter(int, 1, 10, 1)}
+                           'Sample rate reduction':Parameter(int, 1, 25, 1)}
     
     def process_data(self, data):
         shift_amount = self.parameters['Bitrate reduction'].value
-        data = np.left_shift(np.right_shift(data, shift_amount), shift_amount)
+        data = np.left_shift(np.right_shift(data.real.astype(int), shift_amount), shift_amount)
         reduc_amount = self.parameters['Sample rate reduction'].value
         #there's probably a more fine-grained way to reduce the sample rate
         return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)]
@@ -161,9 +181,13 @@ class Equalization(AudioEffect):
     
     def __init__(self):
         super(Equalization, self).__init__()
+        self._delta_f = 1 / SAMPLE_RATE
     
-    def process_spectrum(self, magn_data, freq_data):
-        return magn_data
+    def process_data(self, data):
+        spectrum = np.fft.fft(data * np.hanning(data.size))
+        frequency = np.fft.fftfreq(data.size)
+        
+        return np.fft.ifft(spectrum).real
 
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
@@ -204,7 +228,7 @@ class Gain(AudioEffect):
         self.parameters = {'Amount':Parameter(float, 0, 10, 1)}
     
     def process_data(self, data):
-        return np.multiply(data, self.parameters['Amount'].value).astype(int)
+        return np.multiply(data, self.parameters['Amount'].value)
 
 class GenericFilter(AudioEffect):
     """An effect for testing FFT"""
@@ -215,11 +239,12 @@ class GenericFilter(AudioEffect):
         super(GenericFilter, self).__init__()
         self.parameters = {'Amount':Parameter(float, 0, 10, 1)}
         
-    def process_spectrum(self, magn_data, freq_data):
-        filter_value = self.parameters['Amount'].value
-        h = np.divide(1, 1 + np.multiply(filter_value, freq_data))
+    def process_data(self, data):
+        modified_data = np.fft.rfft(data)
+        freq = np.fft.fftfreq(modified_data.size)
+        H = np.divide(1,1 + np.multiply(self.parameters['Amount'].value,freq))
         
-        return np.multiply(magn_data, h)
+        return np.fft.irfft(np.multiply(modified_data,H)).real
     
 class Passthrough(AudioEffect):
     """An effect for testing"""
@@ -229,9 +254,11 @@ class Passthrough(AudioEffect):
     
     def __init__(self):
         super(Passthrough, self).__init__()
-        self.parameters = {'Param 1':Parameter(float, 0, 10, 5),
-                           'Param 2':Parameter()}
-
+        self.parameters = {'Param':Parameter(float, 0, 10, 5),
+                           'TempoParam 1':TempoParameter(),
+                           'TempoParam 2':TempoParameter()}
+    
+    
 class PulseModulation(AudioEffect):
     """Pulse Width Modulation effect.
     
@@ -244,8 +271,8 @@ class PulseModulation(AudioEffect):
     
     def __init__(self):
         super(PulseModulation, self).__init__()
-        self.parameters = {'Duration':Parameter(float, 0.0, 1.0, 0.25),
-                           'Duty':Parameter(float, 0.0, 1.0, 0.5)}
+        self.parameters = {'Duration':Parameter(float, 0.0001, 1.0, 0.25),
+                           'Duty':Parameter(float, 0.0001, 1.0, 0.5)}
         self._old_duration = 0.0
         self._old_duty = 0.0
         self._old_data_size = 0
@@ -269,7 +296,7 @@ class PulseModulation(AudioEffect):
             self._mod = np.roll(self._mod, -self._old_data_size)
         
         self._old_data_size = data.size
-        return np.multiply(data, np.resize(self._mod, (1, data.size)))
+        return np.multiply(data, np.resize(self._mod, (1, data.size))[0])
 
 #this tuple needs to be maintained manually
 available_effects = (Equalization, Decimation, FoldbackDistortion, Gain, GenericFilter, Passthrough, PulseModulation)
