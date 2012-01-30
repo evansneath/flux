@@ -199,6 +199,7 @@ class EffectWidget(QtGui.QFrame):
             slider.setTickPosition(QtGui.QSlider.TicksBothSides)
             slider.setOrientation(QtCore.Qt.Vertical)
             slider.valueChanged.connect(self.create_slider_slot(param))
+            slider.setInvertedAppearance(param.inverted)
             self.layout.addWidget(slider, 3, column, QtCore.Qt.AlignHCenter)
             
             if isinstance(param, effects.TempoParameter):

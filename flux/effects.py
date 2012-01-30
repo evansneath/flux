@@ -3,6 +3,7 @@
 import struct
 import math
 import time
+import collections
 
 import numpy as np
 
@@ -73,13 +74,20 @@ class AudioPath(QtCore.QObject):
                 if len(data): #empty arrays cause a crash
                     data = effect.process_data(data)
                     
-            ###
-            ##performance timing
+            ####
+            ##processing performace timing
             #t2 = time.clock() 
             #self.ts.append(t2-t1)
             #if len(self.ts) % 100 == 0:
             #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
             #    self.ts = []
+            ####
+            ##time between on_ready_read calls
+            #self.ts.append(time.clock())
+            #if len(self.ts) % 100 == 0:
+            #    print (sum(self.ts[i] - self.ts[i-1] for i in range(1, len(self.ts))) / (len(self.ts) - 1)) * 1000, 'ms'
+            #    self.ts = []
+            #        
             ###
         
         self.sink.write(data.clip(SAMPLE_MIN, SAMPLE_MAX).astype('int16').tostring())
@@ -88,12 +96,13 @@ class Parameter(QtCore.QObject):
     """A description of an effect parameter.
     
     Members:
-        maximum -- The largest value that the parameter should contain.
-        minumum -- The smallest value that the parameter should contain.
-        value   -- The current value of the parameter. It is updated whenever the interface element changes.
-        type    -- The type that value sould be stored as.
+        maximum  -- The largest value that the parameter should contain.
+        minumum  -- The smallest value that the parameter should contain.
+        value    -- The current value of the parameter. It is updated whenever the interface element changes.
+        type     -- The type that value sould be stored as.
+        inverted -- If True, a slider at the highest position will produce the minimum value and vice versa.
     """
-    def __init__(self, type=int, minimum=0, maximum=100, value=10):
+    def __init__(self, type=int, minimum=0, maximum=100, value=10, inverted=False):
         super(Parameter, self).__init__()
         
         #type must be a callable that will convert a value from a float to the desired type
@@ -101,6 +110,7 @@ class Parameter(QtCore.QObject):
         self.minimum = minimum
         self.maximum = maximum
         self.value = value
+        self.inverted = inverted
         
 class TempoParameter(Parameter):
     """A Parameter whose value can be overridden by a user supplied tempo, in beats-per-minute.
@@ -151,6 +161,21 @@ class AudioEffect(QtCore.QObject):
         """
         return data
 
+class Compressor(AudioEffect):
+    name = 'Compressor'
+    description = 'Hard Knee, Instant Attck'
+    
+    def __init__(self):
+        super(Compressor, self).__init__()
+        self.parameters = {'Amount':Parameter(float, 1, 5, 1),
+                           'Threshold':Parameter(int, 0, SAMPLE_MAX / 10, SAMPLE_MAX / 40)}
+        
+    def process_data(self, data):
+        tl = self.parameters['Threshold'].value
+        th = SAMPLE_MAX - tl
+        a = self.parameters['Amount'].value
+        return np.piecewise(data.astype(float), [data < tl, data > th], [lambda x: tl - (tl - x) / a, lambda x: th + (x - th) / a, lambda x: x])
+
 class Decimation(AudioEffect):
     """Decimation / Bitcrushing effect.
         
@@ -163,13 +188,13 @@ class Decimation(AudioEffect):
     
     def __init__(self):
         super(Decimation, self).__init__()
-        self.parameters = {'Bitrate reduction':Parameter(int, 0, SAMPLE_SIZE, 0),
-                           'Sample rate reduction':Parameter(int, 1, 25, 1)}
+        self.parameters = {'Bitrate':Parameter(int, 0, SAMPLE_SIZE, 0, inverted=True),
+                           'Sample rate':Parameter(int, 1, 25, 1, inverted=True)}
     
     def process_data(self, data):
-        shift_amount = self.parameters['Bitrate reduction'].value
+        shift_amount = self.parameters['Bitrate'].value
         data = np.left_shift(np.right_shift(data.real.astype(int), shift_amount), shift_amount)
-        reduc_amount = self.parameters['Sample rate reduction'].value
+        reduc_amount = self.parameters['Sample rate'].value
         #there's probably a more fine-grained way to reduce the sample rate
         return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)]
 
@@ -232,7 +257,7 @@ class Gain(AudioEffect):
 
 class GenericFilter(AudioEffect):
     """An effect for testing FFT"""
-    name = 'GenericFilter'
+    name = 'Generic Filter'
     description = 'Testing fft and filtering'
 
     def __init__(self):
@@ -245,6 +270,53 @@ class GenericFilter(AudioEffect):
         H = np.divide(1,1 + np.multiply(self.parameters['Amount'].value,freq))
         
         return np.fft.irfft(np.multiply(modified_data,H)).real
+        
+class NoiseGate(AudioEffect):
+    """A simple threshold gate without hysteresis"""
+    
+    name = 'Noise Gate'
+    description = 'Basic noise gate (no hysteresis)'
+    
+    def __init__(self):
+        super(NoiseGate, self).__init__()
+        self.parameters = {'Attenuation':Parameter(float, 0, 1, 1, inverted=True),
+                           'Threshold':Parameter(int, 0, SAMPLE_MAX / 100, SAMPLE_MAX / 200)}
+
+    def process_data(self, data):
+        data[data < self.parameters['Threshold'].value] *= self.parameters['Attenuation'].value
+        return data
+
+class HysteresisGate(AudioEffect):
+    """A two-threshold gate with hysteresis"""
+    
+    name = 'Hysteresis Gate'
+    description = 'Noise gate with hysteresis (slower)'
+    
+    def __init__(self):
+        super(HysteresisGate, self).__init__()
+        self.parameters = {'Attenuation':Parameter(float, 0, 1, 1, inverted=True),
+                           'Pass Threshold':Parameter(int, 0, SAMPLE_MAX / 100, SAMPLE_MAX / 200),
+                           'Mute Threshold':Parameter(int, 0, SAMPLE_MAX / 100, SAMPLE_MAX / 300)}
+        
+    def process_data(self, data):
+        multiplier = self.parameters['Attenuation'].value
+        low = self.parameters['Mute Threshold'].value
+        high = self.parameters['Pass Threshold'].value
+        
+        muted = True
+        for i in xrange(len(data)):
+            if muted:
+                if -high <= data[i] <= high:
+                    data[i] *= multiplier
+                else:
+                    muted = False
+            else:
+                if -low <= data[i] <= low:
+                    muted = True
+                    data[i] *= multiplier
+        return data
+                    
+        
     
 class Passthrough(AudioEffect):
     """An effect for testing"""
@@ -257,8 +329,7 @@ class Passthrough(AudioEffect):
         self.parameters = {'Param':Parameter(float, 0, 10, 5),
                            'TempoParam 1':TempoParameter(),
                            'TempoParam 2':TempoParameter()}
-    
-    
+        
 class PulseModulation(AudioEffect):
     """Pulse Width Modulation effect.
     
@@ -299,4 +370,4 @@ class PulseModulation(AudioEffect):
         return np.multiply(data, np.resize(self._mod, (1, data.size))[0])
 
 #this tuple needs to be maintained manually
-available_effects = (Equalization, Decimation, FoldbackDistortion, Gain, GenericFilter, Passthrough, PulseModulation)
+available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Gain, GenericFilter, NoiseGate, HysteresisGate, Passthrough, PulseModulation)
