@@ -315,8 +315,6 @@ class HysteresisGate(AudioEffect):
                     muted = True
                     data[i] *= multiplier
         return data
-                    
-        
     
 class Passthrough(AudioEffect):
     """An effect for testing"""
@@ -369,5 +367,34 @@ class PulseModulation(AudioEffect):
         self._old_data_size = data.size
         return np.multiply(data, np.resize(self._mod, (1, data.size))[0])
 
+class Tremelo(AudioEffect):
+    """Tremelo effect.
+    
+    Parameters:
+        speed -- The 
+        intensity -- The of the signal magnitude varied by the tremelo.
+    """
+    name = 'Tremelo'
+    description = 'Alters the signal with sinusoidal wave, creating a vibrato effect.'
+    def __init__(self):
+        super(Tremelo, self).__init__()
+        self.parameters = {'Speed':Parameter(float, 0, 1.0, 0.25),
+                           'Intensity':Parameter(float, 0, 1.0, 0.25)}
+        self._old_speed = 0.0
+        self._old_intensity = 0.0
+        self._old_data_size = 0
+    
+    def process_data(self, data):
+        speed = self.paramters['Speed'].value
+        intensity = self.parameters['Intensity'].value
+        
+        if (self._old_speed != speed or self._old_intensity != intensity):
+            self._mod = np.add(np.multiply(intensity, np.sin(np.linspace(-np.pi, np.pi, SAMPLE_RATE * speed))), intensity)
+        else:
+            self._mod = np.roll(self._mod, -self._old_data_size)
+        
+        self._old_data_size = data.size
+        return np.multiply(data, np.resize(self._mod, (1, data.size))[0])
+
 #this tuple needs to be maintained manually
-available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Gain, GenericFilter, NoiseGate, HysteresisGate, Passthrough, PulseModulation)
+available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Gain, GenericFilter, NoiseGate, HysteresisGate, Passthrough, PulseModulation, Tremelo)
