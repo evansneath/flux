@@ -371,8 +371,8 @@ class Tremelo(AudioEffect):
     """Tremelo effect.
     
     Parameters:
-        speed -- The 
-        intensity -- The of the signal magnitude varied by the tremelo.
+        speed -- The length of a cycle of the tremelo. [s]
+        intensity -- The of the signal magnitude varied by the tremelo. [%]
     """
     name = 'Tremelo'
     description = 'Alters the signal with sinusoidal wave, creating a vibrato effect.'
@@ -389,7 +389,9 @@ class Tremelo(AudioEffect):
         intensity = self.parameters['Intensity'].value
         
         if (self._old_speed != speed or self._old_intensity != intensity):
-            self._mod = np.add(np.multiply(intensity, np.sin(np.linspace(-np.pi, np.pi, SAMPLE_RATE * speed))), intensity)
+            # create the modification array as a sine wave. At max, the tremelo
+            # speed will be 1 second and intensity ranges from 0 to 1.
+            self._mod = np.add(np.multiply(intensity, np.sin(np.linspace(-np.pi, np.pi, SAMPLE_RATE * speed))), 1 - intensity)
         else:
             self._mod = np.roll(self._mod, -self._old_data_size)
         
