@@ -362,10 +362,10 @@ class PulseModulation(AudioEffect):
             self._mod = np.concatenate([np.ones(active_samples),
                                         np.zeros(inactive_samples)])
         else:
-            self._mod = np.roll(self._mod, -self._old_data_size)
+            self._mod = np.roll(self._mod, self._old_data_size)
         
         self._old_data_size = data.size
-        return np.multiply(data, np.resize(self._mod, (1, data.size))[0])
+        return np.multiply(data, np.resize(self._mod, (data.size,)))
 
 class Tremelo(AudioEffect):
     """Tremelo effect.
@@ -378,25 +378,30 @@ class Tremelo(AudioEffect):
     description = 'Alters the signal with sinusoidal wave, creating a vibrato effect.'
     def __init__(self):
         super(Tremelo, self).__init__()
-        self.parameters = {'Speed':Parameter(float, 0, 1.0, 0.25),
-                           'Intensity':Parameter(float, 0, 1.0, 0.25)}
+        self.parameters = {'Speed':Parameter(float, 3.0, 10.0, 5.0),
+                           'Intensity':Parameter(float, 0.0, 0.8, 0.25)}
         self._old_speed = 0.0
         self._old_intensity = 0.0
         self._old_data_size = 0
     
     def process_data(self, data):
-        speed = self.paramters['Speed'].value
+        speed = self.parameters['Speed'].value
         intensity = self.parameters['Intensity'].value
         
         if (self._old_speed != speed or self._old_intensity != intensity):
             # create the modification array as a sine wave. At max, the tremelo
             # speed will be 1 second and intensity ranges from 0 to 1.
-            self._mod = np.add(np.multiply(intensity, np.sin(np.linspace(-np.pi, np.pi, SAMPLE_RATE * speed))), 1 - intensity)
+            self._old_speed = speed
+            self._old_intensity = intensity
+            
+            self._mod = np.add(1 - intensity, np.multiply(intensity, np.sin(
+                np.linspace(0, 2 * np.pi, num=((1 / speed) * SAMPLE_RATE),
+                            endpoint=True))))
         else:
             self._mod = np.roll(self._mod, -self._old_data_size)
         
         self._old_data_size = data.size
-        return np.multiply(data, np.resize(self._mod, (1, data.size))[0])
+        return np.multiply(data, np.resize(self._mod, (data.size,)))
 
 #this tuple needs to be maintained manually
 available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Gain, GenericFilter, NoiseGate, HysteresisGate, Passthrough, PulseModulation, Tremelo)
