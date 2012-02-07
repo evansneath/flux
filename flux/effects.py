@@ -6,12 +6,14 @@ import time
 import collections
 
 import numpy as np
+from scipy.signal import lfilter, filter_design
 
 from PySide import QtCore, QtGui, QtMultimedia
 
 SAMPLE_MAX = 32767
 SAMPLE_MIN = -(SAMPLE_MAX + 1)
 SAMPLE_RATE = 44100 # [Hz]
+NYQUIST = SAMPLE_RATE / 2
 SAMPLE_SIZE = 16 # [bit]
 CHANNEL_COUNT = 1
 BUFFER_SIZE = 2000 #this is the smallest buffer that prevents underruns on my machine
@@ -315,7 +317,37 @@ class HysteresisGate(AudioEffect):
                     muted = True
                     data[i] *= multiplier
         return data
+
+class LowPass(AudioEffect):
+    """Creates a low-pass filter using windowing in frequency domain.
     
+    Parameters:
+        cutoff -- The frequency to pass through. All higher frequencies are cut off.
+    """
+    
+    name = 'Low-Pass Filter'
+    description = 'Creates a low-pass filter using windowing in the frequency domain.'
+    
+    def __init__(self):
+        super(LowPass, self).__init__()
+        self.parameters = {'Cutoff':Parameter(int, 20, 22050, 20000)}
+        self._old_cutoff = 0
+        self._old_data_size = 0
+        self._h_freq = np.array([])
+    
+    def process_data(self, data):
+        cutoff = self.parameters['Cutoff'].value
+        
+        if cutoff != self._old_cutoff or data.size != self._old_data_size:
+            h_bare = np.arange(-(data.size) / 2, (data.size) / 2)
+            h_sinc = (2 * cutoff / SAMPLE_RATE) * np.sinc(np.multiply(2 * cutoff / SAMPLE_RATE, h_bare))
+            h = np.multiply(np.hamming(data.size), h_sinc)
+            self._h_freq = np.fft.fft(h)
+            self._old_cutoff = cutoff
+            self._old_data_size = data.size
+        
+        return np.fft.irfft(np.multiply(np.fft.fft(data), self._h_freq))
+
 class Passthrough(AudioEffect):
     """An effect for testing"""
     
@@ -367,6 +399,40 @@ class PulseModulation(AudioEffect):
         self._old_data_size = data.size
         return np.multiply(data, np.resize(self._mod, (data.size,)))
 
+class Reverb(AudioEffect):
+    """Reverberation effect.
+    
+    Parameters:
+        loop_time -- Time between repetitions of the instantaneous signal. [ms]
+        duration -- Total time of the reverb from start to fade out. [s]
+    """
+    name = 'Reverb'
+    description = 'Passes the signal through a comb filter creating a feedback reverberation effect.'
+    
+    def __init__(self):
+        super(Reverb, self).__init__()
+        self.parameters = {'LoopTime':Parameter(float, 1, 1000.0, 1.0),
+                           'Duration':Parameter(float, 0.1, 10.0, 2.0)}
+        self._old_loop_time = 0
+        self._old_duration = 0
+        self._a = np.array([])
+        self._b = np.array([])
+    
+    def process_data(self, data):
+        loop_time = self.parameters['LoopTime'].value
+        duration = self.parameters['Duration'].value
+        
+        if (loop_time != self._old_loop_time or duration != self._old_duration):
+            tau = loop_time / 1000.0
+            n = tau * SAMPLE_RATE
+            g = (10.0 ** -3) ** (tau / duration)
+            self._a = np.concatenate(([1], np.zeros(n), [-g]))
+            self._b = np.array([1])
+        
+        out = lfilter(self._b, self._a, data, axis=0)
+        
+        return out
+
 class Tremelo(AudioEffect):
     """Tremelo effect.
     
@@ -375,7 +441,8 @@ class Tremelo(AudioEffect):
         intensity -- The of the signal magnitude varied by the tremelo. [%]
     """
     name = 'Tremelo'
-    description = 'Alters the signal with sinusoidal wave, creating a vibrato effect.'
+    description = 'Modulates the time signal with sinusoidal wave, creating a vibrato effect.'
+    
     def __init__(self):
         super(Tremelo, self).__init__()
         self.parameters = {'Speed':Parameter(float, 3.0, 10.0, 5.0),
@@ -394,7 +461,7 @@ class Tremelo(AudioEffect):
             self._old_speed = speed
             self._old_intensity = intensity
             
-            self._mod = np.add(1 - intensity, np.multiply(intensity, np.sin(
+            self._mod = np.add(1 - intensity, np.multiply(intensity, np.cos(
                 np.linspace(0, 2 * np.pi, num=((1 / speed) * SAMPLE_RATE),
                             endpoint=True))))
         else:
@@ -404,4 +471,4 @@ class Tremelo(AudioEffect):
         return np.multiply(data, np.resize(self._mod, (data.size,)))
 
 #this tuple needs to be maintained manually
-available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Gain, GenericFilter, NoiseGate, HysteresisGate, Passthrough, PulseModulation, Tremelo)
+available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Gain, GenericFilter, HysteresisGate, LowPass, NoiseGate, Passthrough, PulseModulation, Reverb, Tremelo)
