@@ -16,7 +16,7 @@ SAMPLE_RATE = 44100 # [Hz]
 NYQUIST = SAMPLE_RATE / 2
 SAMPLE_SIZE = 16 # [bit]
 CHANNEL_COUNT = 1
-BUFFER_SIZE = 2000 #this is the smallest buffer that prevents underruns on my machine
+BUFFER_SIZE = 2500 #this is the smallest buffer that prevents underruns on my machine
 
 class AudioPath(QtCore.QObject):
     """Class that handles audio input and output and applying effects.
@@ -52,7 +52,7 @@ class AudioPath(QtCore.QObject):
         self.processing_enabled = True
         
         self.effects = []
-        
+    
     def start(self):
         self.processing_enabled = True
         
@@ -60,14 +60,14 @@ class AudioPath(QtCore.QObject):
         self.sink = self.audio_output.start()
         
         self.source.readyRead.connect(self.on_ready_read)
-        
+    
     def stop(self):
         self.audio_input.stop()
         self.audio_output.stop()
-        
+    
     def on_ready_read(self):
         #cast the input data as int32 while it's being processed so that it doesn't get clipped prematurely
-        data = np.fromstring(self.source.readAll(), 'int16').astype(int)
+        data = np.fromstring(self.source.readAll(), 'int16').astype(float)
         
         if self.processing_enabled:
             #t1 = time.clock() #for performance timing
@@ -113,7 +113,7 @@ class Parameter(QtCore.QObject):
         self.maximum = maximum
         self.value = value
         self.inverted = inverted
-        
+
 class TempoParameter(Parameter):
     """A Parameter whose value can be overridden by a user supplied tempo, in beats-per-minute.
     
@@ -144,7 +144,7 @@ class TempoParameter(Parameter):
         
     def set_use_bpm(self, value):
         self.use_bpm = value
-        
+
 class AudioEffect(QtCore.QObject):
     """Base class for audio effects."""
     name = 'Unknown Effect'
@@ -170,13 +170,17 @@ class Compressor(AudioEffect):
     def __init__(self):
         super(Compressor, self).__init__()
         self.parameters = {'Amount':Parameter(float, 1, 5, 1),
-                           'Threshold':Parameter(int, 0, SAMPLE_MAX / 10, SAMPLE_MAX / 40)}
+                           'Threshold':Parameter(int, 0, SAMPLE_MAX / 2, SAMPLE_MAX / 10)}
         
     def process_data(self, data):
         tl = self.parameters['Threshold'].value
         th = SAMPLE_MAX - tl
         a = self.parameters['Amount'].value
-        return np.piecewise(data.astype(float), [data < tl, data > th], [lambda x: tl - (tl - x) / a, lambda x: th + (x - th) / a, lambda x: x])
+        return np.piecewise(data,
+                            [data > th, data < -th, (0 < data) & (data < tl)],
+                            [lambda x: th + (x - th) / a, lambda x: -th + (th + x) / a,
+                             lambda x: x + (tl - x) / a, #this is still wrong
+                             lambda x: x])
 
 class Decimation(AudioEffect):
     """Decimation / Bitcrushing effect.
@@ -198,11 +202,10 @@ class Decimation(AudioEffect):
         data = np.left_shift(np.right_shift(data.real.astype(int), shift_amount), shift_amount)
         reduc_amount = self.parameters['Sample rate'].value
         #there's probably a more fine-grained way to reduce the sample rate
-        return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)]
+        return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)].astype(float)
 
 class Equalization(AudioEffect):
-    """Equalization effect
-    """
+    """Equalization effect"""
     name = 'Equalization'
     description = ''
     
@@ -239,6 +242,23 @@ class FoldbackDistortion(AudioEffect):
         vec = np.vectorize(func)
         return np.piecewise(data, [data < -threshold, data > threshold], [vec, vec, lambda x: x])
 
+class Fuzzer(AudioEffect):
+    """FuzzFace based on model at http://www.geofex.com/effxfaq/distn101.htm
+    
+    Parameters:
+        Amount --   A factor from 0 to 5.0 representing the 
+                     amount of distortion to add."""
+    name = 'Fuzzer'
+    description = 'Asymetrical distortion'
+    
+    def __init__(self):
+        super(Fuzzer, self).__init__()
+        self.parameters = {'Amount':Parameter(float, 1, 5, 1)}
+    
+    def process_data(self, data):
+        a = self.parameters['Amount'].value
+        return np.piecewise(data, [data > 0, data < 0], [lambda x: x * a, lambda x: x / a, 0])
+
 class Gain(AudioEffect):
     """Gain effect
     
@@ -272,7 +292,7 @@ class GenericFilter(AudioEffect):
         H = np.divide(1,1 + np.multiply(self.parameters['Amount'].value,freq))
         
         return np.fft.irfft(np.multiply(modified_data,H)).real
-        
+
 class NoiseGate(AudioEffect):
     """A simple threshold gate without hysteresis"""
     
@@ -347,6 +367,27 @@ class LowPass(AudioEffect):
             self._old_data_size = data.size
         
         return np.fft.irfft(np.multiply(np.fft.fft(data), self._h_freq))
+        
+class Overdrive(AudioEffect):
+    name = 'Overdrive'
+    description = 'Non-linear distortion'
+    
+    def __init__(self):
+        super(Overdrive, self).__init__()
+        self.parameters = {'Amount':Parameter(float, 0.1, 0.75, 0.75, inverted=True),
+                           'Sensitivity':Parameter(float, 0.01, 1, 1, inverted=True)}
+    
+    def sigmoid_vector(self):
+        #a knee of 0.75 results in approxamately linear amplification for -0.5 < x < 0.5
+        knee = self.parameters['Amount'].value
+        def f(x):
+            return  x / (x*x + knee)
+        return np.vectorize(f)
+    
+    def process_data(self, data):
+        #normalize the data before applying the amplification
+        normal_factor = SAMPLE_MAX * self.parameters['Sensitivity'].value
+        return self.sigmoid_vector()(data / normal_factor) * normal_factor
 
 class Passthrough(AudioEffect):
     """An effect for testing"""
@@ -359,7 +400,7 @@ class Passthrough(AudioEffect):
         self.parameters = {'Param':Parameter(float, 0, 10, 5),
                            'TempoParam 1':TempoParameter(),
                            'TempoParam 2':TempoParameter()}
-        
+
 class PulseModulation(AudioEffect):
     """Pulse Width Modulation effect.
     
@@ -471,4 +512,6 @@ class Tremelo(AudioEffect):
         return np.multiply(data, np.resize(self._mod, (data.size,)))
 
 #this tuple needs to be maintained manually
-available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Gain, GenericFilter, HysteresisGate, LowPass, NoiseGate, Passthrough, PulseModulation, Reverb, Tremelo)
+available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Fuzzer, Gain,
+                     GenericFilter, HysteresisGate, LowPass, NoiseGate, Overdrive, Passthrough,
+                     PulseModulation, Reverb, Tremelo)
