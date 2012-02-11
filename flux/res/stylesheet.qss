@@ -38,6 +38,9 @@ QTabBar::close-button {
 QTabBar::close-button:hover {
     image: url(res/icons/tab_close_hover.png)
 }
+QTabBar::close-button:pressed {
+    image: url(res/icons/tab_close_pressed.png)
+}
 #tempo_widget {
     max-width:7em;
 }
@@ -45,7 +48,7 @@ QTabBar::close-button:hover {
     max-width:3.5em;
 }
 #add_tab_button {
-    padding:3px;
+    padding:6px 3px;
     margin-bottom:-4px;
     margin-right:1px;
 }
