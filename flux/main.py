@@ -100,7 +100,7 @@ class FlowLayout(QtGui.QLayout):
 class FluxCentralWidget(QtGui.QTabWidget):
     widgets_changed = QtCore.Signal()
     
-    _drag_indicator_padding = QtCore.QPoint(0, 13)
+    _drag_indicator_offset = QtCore.QPoint(0, 13)
     
     def __init__(self):
         super(FluxCentralWidget, self).__init__()
@@ -145,7 +145,7 @@ class FluxCentralWidget(QtGui.QTabWidget):
     def select_next_tab(self):
         if self.count():
             self.setCurrentIndex((self.currentIndex() + 1) % self.count())
-            
+        
     def select_prev_tab(self):
         if self.count():
             if self.currentIndex() > 0:
@@ -184,12 +184,20 @@ class FluxCentralWidget(QtGui.QTabWidget):
             
     def _effect_widget_at(self, pos):
         widget = self.childAt(pos)
-        if isinstance(widget, QtGui.QLabel):
-            widget = widget.parentWidget()
-        if isinstance(widget, EffectWidgetTitleBar):
-            widget = widget.parentWidget()
-        if isinstance(widget, EffectWidget):
-            return widget
+        
+        if type(widget) is QtGui.QWidget:
+            #if pos is between two widgets, return the widget to the right if there is one
+            margin = self.currentWidget().layout.spacing()
+            widget = self.childAt(pos + QtCore.QPoint(margin, 0))
+           
+        #widget might be a descendant of an EffectWidget, so walk up the ownership tree
+        for _ in xrange(5):
+            if widget is None:
+                return None
+            if isinstance(widget, EffectWidget):
+                return widget
+            else:
+                widget = widget.parentWidget()
         return None
         
     def mousePressEvent(self, event):
@@ -218,9 +226,9 @@ class FluxCentralWidget(QtGui.QTabWidget):
             if widget is None:
                 #place the indicator to the right of the last widget
                 widget = self.currentWidget().layout.itemList[-1].widget()
-                pos = widget.pos() + self._drag_indicator_padding + QtCore.QPoint(widget.width(), 0)
+                pos = widget.pos() + self._drag_indicator_offset + QtCore.QPoint(widget.width(), 0)
             else:
-                pos = widget.pos() + self._drag_indicator_padding
+                pos = widget.pos() + self._drag_indicator_offset
             
             self.drag_indicator.move(pos)
             self.drag_indicator.show()
