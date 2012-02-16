@@ -6,7 +6,7 @@ import time
 import collections
 
 import numpy as np
-from scipy.signal import lfilter, filter_design
+import scipy.signal as signal
 
 from PySide import QtCore, QtGui, QtMultimedia
 
@@ -17,6 +17,10 @@ NYQUIST = SAMPLE_RATE / 2
 SAMPLE_SIZE = 16 # [bit]
 CHANNEL_COUNT = 1
 BUFFER_SIZE = 2500 #this is the smallest buffer that prevents underruns on my machine
+
+
+def samples_from_ms(milliseconds):
+    return milliseconds * 0.001 * SAMPLE_RATE
 
 class AudioPath(QtCore.QObject):
     """Class that handles audio input and output and applying effects.
@@ -70,19 +74,19 @@ class AudioPath(QtCore.QObject):
         data = np.fromstring(self.source.readAll(), 'int16').astype(float)
         
         if self.processing_enabled:
-            #t1 = time.clock() #for performance timing
+            t1 = time.clock() #for performance timing
             
             for effect in self.effects:
                 if len(data): #empty arrays cause a crash
                     data = effect.process_data(data)
                     
             ####
-            ##processing performace timing
-            #t2 = time.clock() 
-            #self.ts.append(t2-t1)
-            #if len(self.ts) % 100 == 0:
-            #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-            #    self.ts = []
+            #processing performace timing
+            t2 = time.clock() 
+            self.ts.append(t2-t1)
+            if len(self.ts) % 100 == 0:
+                print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+                self.ts = []
             ####
             ##time between on_ready_read calls
             #self.ts.append(time.clock())
@@ -104,6 +108,10 @@ class Parameter(QtCore.QObject):
         type     -- The type that value sould be stored as.
         inverted -- If True, a slider at the highest position will produce the minimum value and vice versa.
     """
+    
+    #Signal emmited when value member changes
+    value_changed = QtCore.Signal()
+    
     def __init__(self, type=int, minimum=0, maximum=100, value=10, inverted=False):
         super(Parameter, self).__init__()
         
@@ -111,8 +119,18 @@ class Parameter(QtCore.QObject):
         self.type = type
         self.minimum = minimum
         self.maximum = maximum
-        self.value = value
+        self._value = value
         self.inverted = inverted
+        
+    @property
+    def value(self):
+        return self._value
+    
+    @value.setter
+    def value(self, val):
+        self._value = val
+        self.value_changed.emit()
+        
 
 class TempoParameter(Parameter):
     """A Parameter whose value can be overridden by a user supplied tempo, in beats-per-minute.
@@ -204,14 +222,43 @@ class Decimation(AudioEffect):
         #there's probably a more fine-grained way to reduce the sample rate
         return np.repeat(data[::reduc_amount], reduc_amount)[:len(data)].astype(float)
 
+class Delay(AudioEffect):
+    """Delay"""
+    name = 'Delay'
+    description = 'One tap, 100ms-1s delay'
+    
+    def __init__(self):
+        super(Delay, self).__init__()
+        
+        self.parameters = {'Delay':Parameter(int, samples_from_ms(100), samples_from_ms(1000), samples_from_ms(150)),
+                           'Mix':Parameter(float, 0, 1, .5),
+                           'Feedback':Parameter(float, 0, 1.1, .5)} #maximum feedback slightly greater than 1, be careful
+        
+        self.delay_line = None
+        self.value_changed_event()
+        
+        self.parameters['Delay'].value_changed.connect(self.delay_changed_event)
+
+    def delay_changed_event(self):
+        self.delay_line = np.zeros(self.parameters['Delay'].value)
+        
+    def process_data(self, data):
+        wet = self.parameters['Mix'].value
+        dry = 1 - wet
+        mixin = self.delay_line[:len(data)] * wet
+        self.delay_line[:len(data)] = data + mixin * self.parameters['Feedback'].value
+        self.delay_line = np.roll(self.delay_line, -len(data))
+        
+        return (data * dry) + mixin
+        
+    
+    
 class Equalization(AudioEffect):
     """Equalization effect"""
     name = 'Equalization'
     description = ''
     
-    def __init__(self):
-        super(Equalization, self).__init__()
-        self._delta_f = 1 / SAMPLE_RATE
+    _delta_f = 1 / SAMPLE_RATE
     
     def process_data(self, data):
         spectrum = np.fft.fft(data * np.hanning(data.size))
@@ -470,7 +517,7 @@ class Reverb(AudioEffect):
             self._a = np.concatenate(([1], np.zeros(n), [-g]))
             self._b = np.array([1])
         
-        out = lfilter(self._b, self._a, data, axis=0)
+        out = signal.lfilter(self._b, self._a, data, axis=0)
         
         return out
 
@@ -512,6 +559,6 @@ class Tremelo(AudioEffect):
         return np.multiply(data, np.resize(self._mod, (data.size,)))
 
 #this tuple needs to be maintained manually
-available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Fuzzer, Gain,
+available_effects = (Decimation, Delay, FoldbackDistortion, Fuzzer, Gain,
                      GenericFilter, HysteresisGate, LowPass, NoiseGate, Overdrive, Passthrough,
                      PulseModulation, Reverb, Tremelo)
