@@ -70,7 +70,7 @@ class AudioPath(QtCore.QObject):
         data = np.fromstring(self.source.readAll(), 'int16').astype(float)
         
         if self.processing_enabled:
-            #t1 = time.clock() #for performance timing
+            t1 = time.clock() #for performance timing
             
             for effect in self.effects:
                 if len(data): #empty arrays cause a crash
@@ -78,11 +78,11 @@ class AudioPath(QtCore.QObject):
                     
             ####
             ##processing performace timing
-            #t2 = time.clock() 
-            #self.ts.append(t2-t1)
-            #if len(self.ts) % 100 == 0:
-            #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-            #    self.ts = []
+            t2 = time.clock() 
+            self.ts.append(t2-t1)
+            if len(self.ts) % 100 == 0:
+                print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+                self.ts = []
             ####
             ##time between on_ready_read calls
             #self.ts.append(time.clock())
@@ -350,7 +350,7 @@ class LowPass(AudioEffect):
     
     def __init__(self):
         super(LowPass, self).__init__()
-        self.parameters = {'Cutoff':Parameter(int, 20, 22050, 20000)}
+        self.parameters = {'Cutoff':Parameter(int, 20, NYQUIST, 16000)}
         self._old_cutoff = 0
         self._old_data_size = 0
         self._h_freq = np.array([])
@@ -360,14 +360,53 @@ class LowPass(AudioEffect):
         
         if cutoff != self._old_cutoff or data.size != self._old_data_size:
             h_bare = np.arange(-(data.size) / 2, (data.size) / 2)
-            h_sinc = (2 * cutoff / SAMPLE_RATE) * np.sinc(np.multiply(2 * cutoff / SAMPLE_RATE, h_bare))
+            h_sinc = np.multiply(2 * cutoff / SAMPLE_RATE, np.sinc(np.multiply(2 * cutoff / SAMPLE_RATE, h_bare)))
             h = np.multiply(np.hamming(data.size), h_sinc)
             self._h_freq = np.fft.fft(h)
+            
             self._old_cutoff = cutoff
             self._old_data_size = data.size
         
         return np.fft.irfft(np.multiply(np.fft.fft(data), self._h_freq))
+
+class LowPassButterworth(AudioEffect):
+    """Creates a low-pass filter using an IIR butterworth filter design.
+    
+    Parameters:
+        cutoff -- The frequency to pass through. All higher frequencies are cut off.
+    """
+    
+    name = 'Low-Pass Butterworth Filter'
+    description = 'Creates a low-pass filter using IIR Butterworth filter design.'
+    
+    def __init__(self):
+        super(LowPassButterworth, self).__init__()
+        self.parameters = {'Cutoff':Parameter(float, 20, NYQUIST, 17000),
+                           'Transition':Parameter(float, 0.001, 0.1, 0.1)}
+        self._old_cutoff = 0
+        self._old_transition = 0
+        self._a = np.array([])
+        self._b = np.array([])
+    
+    def process_data(self, data):
+        cutoff = self.parameters['Cutoff'].value
+        transition = self.parameters['Transition'].value 
         
+        if cutoff != self._old_cutoff or transition != self._old_transition:
+            # First get order and designed cutoff from specifications
+            omega_p = float(cutoff) / NYQUIST # passband
+            omega_s = omega_p + transition # stopband
+            #if omega_s > 1.0: omega_s = 1.0
+            print 'OMEGAp:', omega_p, 'OMEGAs: ', omega_s
+            (order, omega_n) = filter_design.buttord(omega_p, omega_s, -2, -6, analog=0)
+            print 'ORDER: ', order
+            (self._b, self._a) = filter_design.butter(order, omega_n, btype='low', analog=0, output='ba')
+            
+            self._old_cutoff = cutoff
+            self._old_transition = transition
+        
+        return lfilter(self._b, self._a, data)
+
 class Overdrive(AudioEffect):
     name = 'Overdrive'
     description = 'Non-linear distortion'
@@ -405,8 +444,9 @@ class PulseModulation(AudioEffect):
     """Pulse Width Modulation effect.
     
     Parameters:
-        duration -- The time of the total cycle (on + off time). [s]
-        duty     -- The percentage of on time of the signal. [%]
+        duration  -- The time of the total cycle (on + off time). [s]
+        duty      -- The percentage of on time of the signal. [%]
+        intensity -- The level of dropoff of the signal on the low cycle. [-]
     """
     name = 'Pulse Modulation'
     description = 'Introduces pulse width modulation to the signal.'
@@ -414,26 +454,30 @@ class PulseModulation(AudioEffect):
     def __init__(self):
         super(PulseModulation, self).__init__()
         self.parameters = {'Duration':Parameter(float, 0.0001, 1.0, 0.25),
-                           'Duty':Parameter(float, 0.0001, 1.0, 0.5)}
+                           'Duty':Parameter(float, 0.0001, 1.0, 0.5),
+                           'Intensity':Parameter(float, 0.0001, 0.9, 0.5, True)}
         self._old_duration = 0.0
         self._old_duty = 0.0
+        self._old_intensity = 0.0
         self._old_data_size = 0
         self._mod = np.array([])
     
     def process_data(self, data):
         duration = self.parameters['Duration'].value
         duty = self.parameters['Duty'].value
+        intensity = self.parameters['Intensity'].value
         
-        if (self._old_duration != duration or self._old_duty != duty):
+        if (self._old_duration != duration or self._old_duty != duty or self._old_intensity != intensity):
             total_samples = duration * SAMPLE_RATE
             active_samples = math.floor(total_samples * duty)
             inactive_samples = total_samples - active_samples
             
+            self._mod = np.concatenate([np.ones(active_samples),
+                                        np.add(np.zeros(inactive_samples), intensity)])
+            
             self._old_duration = duration
             self._old_duty = duty
-            
-            self._mod = np.concatenate([np.ones(active_samples),
-                                        np.zeros(inactive_samples)])
+            self._old_intensity = intensity
         else:
             self._mod = np.roll(self._mod, self._old_data_size)
         
@@ -464,13 +508,29 @@ class Reverb(AudioEffect):
         duration = self.parameters['Duration'].value
         
         if (loop_time != self._old_loop_time or duration != self._old_duration):
-            tau = loop_time / 1000.0
-            n = tau * SAMPLE_RATE
-            g = (10.0 ** -3) ** (tau / duration)
+            #tau = loop_time / 1000.0
+            #n = tau * SAMPLE_RATE
+            #g = (10.0 ** -3) ** (tau / duration)
+            
+            # TEST BLOCK #############
+            n = math.floor(SAMPLE_RATE * 0.0005)
+            g = 0.8
+            ##########################
+            
             self._a = np.concatenate(([1], np.zeros(n), [-g]))
             self._b = np.array([1])
+            
+            # TEST BLOCK #############
+            print 'N: ', n
+            print 'G: ', g
+            print 'A.SHAPE: ', self._a.shape
+            print 'B.SHAPE: ', self._b.shape
+            ##########################
+            
+            self._old_loop_time = loop_time
+            self._old_duration = duration
         
-        out = lfilter(self._b, self._a, data, axis=0)
+        out = lfilter(self._b, self._a, data)
         
         return out
 
@@ -513,5 +573,5 @@ class Tremelo(AudioEffect):
 
 #this tuple needs to be maintained manually
 available_effects = (Equalization, Compressor, Decimation, FoldbackDistortion, Fuzzer, Gain,
-                     GenericFilter, HysteresisGate, LowPass, NoiseGate, Overdrive, Passthrough,
-                     PulseModulation, Reverb, Tremelo)
+                     GenericFilter, HysteresisGate, LowPass, LowPassButterworth, NoiseGate,
+                     Overdrive, Passthrough, PulseModulation, Reverb, Tremelo)
