@@ -1,6 +1,7 @@
 import sys
 import time
 import collections
+import serial
 
 import numpy
 from PySide import QtCore, QtGui, QtMultimedia
@@ -456,9 +457,42 @@ class FluxWindow(QtGui.QMainWindow):
     def update_audio_path(self):
         panel = self.central_widget.currentWidget()
         self.audio_path.effects = [i.widget().effect for i in panel.layout.itemList]
+
+class PedalThread(QtCore.QThread):    
+    left_clicked = QtCore.Signal()
+    right_clicked = QtCore.Signal()
+    enable_clicked = QtCore.Signal()
+    
+    connection_lost = QtCore.Signal()
+    
+    def __init__(self):
+        super(PedalThread, self).__init__()
+        for i in range(256):
+            try:
+                self.connection = serial.Serial(i, 9600, timeout=1)
+            except serial.SerialException:
+                pass
         
+    def run(self):
+        #while self.connection.alive.isSet(): 
+        self.connection_lost.emit()
+        checkInput = True
+        while checkInput == True:
+            serInput = self.connection.readline().rstrip()
+            if serInput == "L":
+                self.left_clicked.emit()
+            elif serInput == "R":
+                self.right_clicked.emit()
+            elif serInput == "E":
+                self.enable_clicked.emit()
+                
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
     window = FluxWindow(app)
+    pedal = PedalThread()
+    pedal.left_clicked.connect(window.tab_left_event)
+    pedal.right_clicked.connect(window.tab_right_event)
+    pedal.enable_clicked.connect(window.tab_right_event)
+    pedal.start()
     window.show()
     app.exec_()
