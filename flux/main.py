@@ -1,7 +1,11 @@
 import sys
 import time
 import collections
-import serial
+
+try:
+    import pedal
+except ImportError:
+    pass
 
 import numpy
 from PySide import QtCore, QtGui, QtMultimedia
@@ -188,7 +192,7 @@ class FluxCentralWidget(QtGui.QTabWidget):
         
         if type(widget) is QtGui.QWidget:
             #if pos is between two widgets, return the widget to the right if there is one
-            margin = self.currentWidget().layout.spacing()
+            margin = self.currentWidget().layout.spacing() * 2
             widget = self.childAt(pos + QtCore.QPoint(margin, 0))
            
         #widget might be a descendant of an EffectWidget, so walk up the ownership tree
@@ -221,6 +225,9 @@ class FluxCentralWidget(QtGui.QTabWidget):
         else:
             event.ignore()
             
+    def dragLeaveEvent(self, event):
+        self.drag_indicator.hide()
+                
     def dragMoveEvent(self, event):
         if event.mimeData().hasFormat('application/effect_widget'):
             widget = self._effect_widget_at(event.pos())
@@ -290,15 +297,10 @@ class EffectWidget(QtGui.QFrame):
             label = QtGui.QLabel(name, self)
             self.layout.addWidget(label, 2, column, QtCore.Qt.AlignHCenter)
             
-            slider = QtGui.QSlider(self)
-            slider.setMinimum(0)
-            slider.setMaximum(EffectWidget._slider_max)
-            slider.setValue((float(param.value) / param.maximum) * self._slider_max)
-            slider.setTickInterval(10)
-            slider.setTickPosition(QtGui.QSlider.TicksBothSides)
-            slider.setOrientation(QtCore.Qt.Vertical)
-            slider.valueChanged.connect(self.create_slider_slot(param))
-            slider.setInvertedAppearance(param.inverted)
+            if isinstance(param, effects.DiscreteParameter):
+                slider = self._create_discrete_slider(param)
+            else:
+                slider = self._create_param_slider(param)
             self.layout.addWidget(slider, 3, column, QtCore.Qt.AlignHCenter)
             
             if isinstance(param, effects.TempoParameter):
@@ -307,11 +309,63 @@ class EffectWidget(QtGui.QFrame):
                 button.setCheckable(True)
                 button.toggled.connect(param.set_use_bpm)
                 self.layout.addWidget(button, 4, column, QtCore.Qt.AlignHCenter)
+                
+    def _create_discrete_slider(self, param):
+        widget = QtGui.QWidget()
+        layout = QtGui.QGridLayout()
+        widget.setLayout(layout)
+        
+        slider = QtGui.QSlider(self)
+        slider.setMinimum(0)
+        slider.setMaximum(len(param.choices_dict) - 1)
+        slider.setValue(param.choices_dict.keys().index(param.value))
+        slider.setTickPosition(QtGui.QSlider.TicksRight)
+        slider.setTickInterval(1)
+        slider.setOrientation(QtCore.Qt.Vertical)
+        slider.valueChanged.connect(self._create_discrete_slot(param))
+        slider.setInvertedAppearance(True)
+        
+        layout.addWidget(slider, 0, 0, len(param.choices_dict), 1, QtCore.Qt.AlignHCenter)
+        
+        for row, name in enumerate(param.choices_dict):
+            label = QtGui.QLabel()
+            if param.choices_dict[name]:
+                label.setPixmap(QtGui.QPixmap(param.choices_dict[name]))
+            else:
+                label.setText(name)
+                
+            if row < len(param.choices_dict) / 3:
+                align = QtCore.Qt.AlignTop
+            elif row < len(param.choices_dict) * 2 / 3:
+                align = QtCore.Qt.AlignHCenter
+            else:
+                align = QtCore.Qt.AlignBottom
+            layout.addWidget(label, row, 1, align)
+        
+        return widget
+                
+    def _create_param_slider(self, param):
+        slider = QtGui.QSlider(self)
+        slider.setMinimum(0)
+        slider.setMaximum(EffectWidget._slider_max)
+        slider.setValue((float(param.value) / param.maximum) * self._slider_max)
+        slider.setTickInterval(10)
+        slider.setTickPosition(QtGui.QSlider.TicksBothSides)
+        slider.setOrientation(QtCore.Qt.Vertical)
+        slider.valueChanged.connect(self._create_slider_slot(param))
+        slider.setInvertedAppearance(param.inverted)
+        
+        return slider
             
-    def create_slider_slot(self, param):
+    def _create_slider_slot(self, param):
         def update_paramater(value):
             ratio = value / EffectWidget._slider_max
             param.value = param.type(ratio * (param.maximum - param.minimum) + param.minimum)
+        return update_paramater
+    
+    def _create_discrete_slot(self, param):
+        def update_paramater(value):
+            param.value = param.choices_dict.keys()[value]
         return update_paramater
    
     
@@ -365,6 +419,8 @@ class FluxWindow(QtGui.QMainWindow):
         
         self.app = app
         self.audio_path = effects.AudioPath(app)
+        
+        self.setWindowTitle('Flux Audio Effects')
         
         with open('res/stylesheet.qss') as style_sheet:
             self.setStyleSheet(style_sheet.read())
@@ -458,41 +514,18 @@ class FluxWindow(QtGui.QMainWindow):
         panel = self.central_widget.currentWidget()
         self.audio_path.effects = [i.widget().effect for i in panel.layout.itemList]
 
-class PedalThread(QtCore.QThread):    
-    left_clicked = QtCore.Signal()
-    right_clicked = QtCore.Signal()
-    enable_clicked = QtCore.Signal()
-    
-    connection_lost = QtCore.Signal()
-    
-    def __init__(self):
-        super(PedalThread, self).__init__()
-        for i in range(256):
-            try:
-                self.connection = serial.Serial(i, 9600, timeout=1)
-            except serial.SerialException:
-                pass
-        
-    def run(self):
-        #while self.connection.alive.isSet(): 
-        self.connection_lost.emit()
-        checkInput = True
-        while checkInput == True:
-            serInput = self.connection.readline().rstrip()
-            if serInput == "L":
-                self.left_clicked.emit()
-            elif serInput == "R":
-                self.right_clicked.emit()
-            elif serInput == "E":
-                self.enable_clicked.emit()
-                
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
     window = FluxWindow(app)
-    pedal = PedalThread()
-    pedal.left_clicked.connect(window.tab_left_event)
-    pedal.right_clicked.connect(window.tab_right_event)
-    pedal.enable_clicked.connect(window.tab_right_event)
-    pedal.start()
+    
+    try:
+        pedal_thread = PedalThread()
+        pedal_thread.left_clicked.connect(window.tab_left_event)
+        pedal_thread.right_clicked.connect(window.tab_right_event)
+        pedal_thread.action_clicked.connect(window.tab_right_event)
+        pedal_thread.start()
+    except NameError:
+        #pedal wasn't imported correctly
+        pass
     window.show()
     app.exec_()
