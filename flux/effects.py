@@ -73,7 +73,7 @@ class AudioPath(QtCore.QObject):
         data = np.fromstring(self.source.readAll(), 'int16').astype(float)
         
         if self.processing_enabled:
-            t1 = time.clock() #for performance timing
+            #t1 = time.clock() #for performance timing
             
             for effect in self.effects:
                 if len(data): #empty arrays cause a crash
@@ -81,11 +81,11 @@ class AudioPath(QtCore.QObject):
                     
             ####
             ##processing performace timing
-            t2 = time.clock() 
-            self.ts.append(t2-t1)
-            if len(self.ts) % 100 == 0:
-                print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-                self.ts = []
+            #t2 = time.clock() 
+            #self.ts.append(t2-t1)
+            #if len(self.ts) % 100 == 0:
+            #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+            #    self.ts = []
             ####
             ##time between on_ready_read calls
             #self.ts.append(time.clock())
@@ -179,9 +179,25 @@ class AudioEffect(QtCore.QObject):
         """
         return data
 
+class Chorus(AudioEffect):
+    name = 'Chorus'
+    description = 'Frequency shifting to attain multiinstrumental sound'
+    
+    def __init__(self):
+        super(Chorus, self).__init__()
+        self.parameters = {'Shift':Parameter(float, 1, 500, 5)}
+    
+    def process_data(self, data):
+        padded_data_size = data.size * 10 # zero pad to increase num of elements in freq array
+        spectrum = np.fft.rfft(data, n=padded_data_size)
+        freq = np.fft.fftfreq(padded_data_size, d=1.0/float(SAMPLE_RATE))
+        # add signal to several freq shifted clones of the original
+        spectrum = np.add(spectrum, np.add(np.roll(spectrum, 3), np.roll(spectrum, -3)))
+        return np.resize(np.fft.irfft(spectrum, n=data.size*10), data.size)
+
 class Compressor(AudioEffect):
     name = 'Compressor'
-    description = 'Hard Knee, Instant Attck'
+    description = 'Hard Knee, Instant Attack'
     
     def __init__(self):
         super(Compressor, self).__init__()
@@ -233,7 +249,7 @@ class Delay(AudioEffect):
                            'Feedback':Parameter(float, 0, 1.1, .5)} #maximum feedback slightly greater than 1, be careful
         
         self.delay_line = None
-        self.value_changed_event()
+        self.delay_changed_event()
         
         self.parameters['Delay'].value_changed.connect(self.delay_changed_event)
 
@@ -248,19 +264,6 @@ class Delay(AudioEffect):
         self.delay_line = np.roll(self.delay_line, -len(data))
         
         return (data * dry) + mixin
-    
-class Equalization(AudioEffect):
-    """Equalization effect"""
-    name = 'Equalization'
-    description = ''
-    
-    _delta_f = 1 / SAMPLE_RATE
-    
-    def process_data(self, data):
-        spectrum = np.fft.fft(data * np.hanning(data.size))
-        frequency = np.fft.fftfreq(data.size)
-        
-        return np.fft.ifft(spectrum).real
 
 class FoldbackDistortion(AudioEffect):
     """Foldback distortion
@@ -426,29 +429,39 @@ class LowPassButterworth(AudioEffect):
         super(LowPassButterworth, self).__init__()
         self.parameters = {'Cutoff':Parameter(float, 20, NYQUIST, 17000),
                            'Transition':Parameter(float, 0.001, 0.1, 0.1)}
-        self._old_cutoff = 0
-        self._old_transition = 0
-        self._a = np.array([])
-        self._b = np.array([])
+        self.parameters['Cutoff'].value_changed.connect(self.param_changed_event)
+        self.parameters['Transition'].value_changed.connect(self.param_changed_event)
+        
+        self._a = None
+        self._b = None
+        self._initialized = False
+        self._overflow = np.array([])
+        self.param_changed_event()
+    
+    def param_changed_event(self):
+        # First get order and designed cutoff from specifications
+        omega_p = float(self.parameters['Cutoff'].value) / NYQUIST # passband frequency
+        omega_s = omega_p + self.parameters['Transition'].value # stopband frequency
+        
+        if omega_s > 1.0: omega_s = 1.0 # clip stopband frequency at nyquist val
+        
+        (order, omega_n) = signal.filter_design.buttord(omega_p, omega_s, 3, 15, analog=0)
+        (self._b, self._a) = signal.filter_design.butter(order, omega_n, btype='low', analog=0, output='ba')
+        
+        if self._initialized is False:
+            if self._a.size > self._b.size: zero_len = self._a.size - 1
+            else: zero_len = self._b.size - 1
+            self._overflow = np.zeros(zero_len)
+            self._initialized = True
+        
+        ### TEST BLOCK ###
+        #print 'Wp=', omega_p, ' Ws=', omega_s, ' ord=', order
+        ##################
     
     def process_data(self, data):
-        cutoff = self.parameters['Cutoff'].value
-        transition = self.parameters['Transition'].value 
-        
-        if cutoff != self._old_cutoff or transition != self._old_transition:
-            # First get order and designed cutoff from specifications
-            omega_p = float(cutoff) / NYQUIST # passband
-            omega_s = omega_p + transition # stopband
-            #if omega_s > 1.0: omega_s = 1.0
-            print 'OMEGAp:', omega_p, 'OMEGAs: ', omega_s
-            (order, omega_n) = filter_design.buttord(omega_p, omega_s, -2, -6, analog=0)
-            print 'ORDER: ', order
-            (self._b, self._a) = filter_design.butter(order, omega_n, btype='low', analog=0, output='ba')
-            
-            self._old_cutoff = cutoff
-            self._old_transition = transition
-        
-        return lfilter(self._b, self._a, data)
+        (out, self._overflow) = signal.lfilter(self._b, self._a, data, axis=0, zi=self._overflow)
+        #print 'overflow.size=', self._overflow.size, 'overflow=', self._overflow
+        return out
 
 class Overdrive(AudioEffect):
     name = 'Overdrive'
@@ -499,33 +512,26 @@ class PulseModulation(AudioEffect):
         self.parameters = {'Duration':Parameter(float, 0.0001, 1.0, 0.25),
                            'Duty':Parameter(float, 0.0001, 1.0, 0.5),
                            'Intensity':Parameter(float, 0.0001, 0.9, 0.5, True)}
-        self._old_duration = 0.0
-        self._old_duty = 0.0
-        self._old_intensity = 0.0
-        self._old_data_size = 0
-        self._mod = np.array([])
+        self.parameters['Duration'].value_changed.connect(self.param_changed_event)
+        self.parameters['Duty'].value_changed.connect(self.param_changed_event)
+        self.parameters['Intensity'].value_changed.connect(self.param_changed_event)
+        
+        self._mod = None
+        self.param_changed_event()
+    
+    def param_changed_event(self):
+        total_samples = self.parameters['Duration'].value * SAMPLE_RATE
+        active_samples = math.floor(total_samples * self.parameters['Duty'].value)
+        inactive_samples = total_samples - active_samples
+        
+        self._mod = np.concatenate([np.ones(active_samples),
+                                    np.add(np.zeros(inactive_samples),
+                                           self.parameters['Intensity'].value)])
     
     def process_data(self, data):
-        duration = self.parameters['Duration'].value
-        duty = self.parameters['Duty'].value
-        intensity = self.parameters['Intensity'].value
-        
-        if (self._old_duration != duration or self._old_duty != duty or self._old_intensity != intensity):
-            total_samples = duration * SAMPLE_RATE
-            active_samples = math.floor(total_samples * duty)
-            inactive_samples = total_samples - active_samples
-            
-            self._mod = np.concatenate([np.ones(active_samples),
-                                        np.add(np.zeros(inactive_samples), intensity)])
-            
-            self._old_duration = duration
-            self._old_duty = duty
-            self._old_intensity = intensity
-        else:
-            self._mod = np.roll(self._mod, self._old_data_size)
-        
-        self._old_data_size = data.size
-        return np.multiply(data, np.resize(self._mod, (data.size,)))
+        out = np.multiply(data, np.resize(self._mod, (data.size,)))
+        self._mod = np.roll(self._mod, data.size)
+        return out
 
 class Reverb(AudioEffect):
     """Reverberation effect.
@@ -541,41 +547,31 @@ class Reverb(AudioEffect):
         super(Reverb, self).__init__()
         self.parameters = {'LoopTime':Parameter(float, 1, 1000.0, 1.0),
                            'Duration':Parameter(float, 0.1, 10.0, 2.0)}
-        self._old_loop_time = 0
-        self._old_duration = 0
-        self._a = np.array([])
-        self._b = np.array([])
+        self.parameters['LoopTime'].value_changed.connect(self.param_changed_event)
+        self.parameters['Duration'].value_changed.connect(self.param_changed_event)
+
+        self._a = None
+        self._b = np.array([1])
+        self.param_changed_event()
     
-    def process_data(self, data):
+    def param_changed_event(self):
         loop_time = self.parameters['LoopTime'].value
         duration = self.parameters['Duration'].value
         
-        if (loop_time != self._old_loop_time or duration != self._old_duration):
-            #tau = loop_time / 1000.0
-            #n = tau * SAMPLE_RATE
-            #g = (10.0 ** -3) ** (tau / duration)
-            
-            # TEST BLOCK #############
-            n = math.floor(SAMPLE_RATE * 0.0005)
-            g = 0.8
-            ##########################
-            
-            self._a = np.concatenate(([1], np.zeros(n), [-g]))
-            self._b = np.array([1])
-            
-            # TEST BLOCK #############
-            print 'N: ', n
-            print 'G: ', g
-            print 'A.SHAPE: ', self._a.shape
-            print 'B.SHAPE: ', self._b.shape
-            ##########################
-            
-            self._old_loop_time = loop_time
-            self._old_duration = duration
+        tau = loop_time / 1000.0
+        n = tau * SAMPLE_RATE
+        g = (10.0 ** -3) ** (tau / duration)
         
-        out = signal.lfilter(self._b, self._a, data, axis=0)
+        # TEST BLOCK #############
+        n = math.floor(SAMPLE_RATE * 0.0005)
+        g = 0.8
+        print 'n=', n, ' g=', g
+        ##########################
         
-        return out
+        self._a = np.concatenate(([1], np.zeros(n), [-g]))
+    
+    def process_data(self, data):
+        return signal.lfilter(self._b, self._a, data)
 
 class Tremelo(AudioEffect):
     """Tremelo effect.
@@ -591,30 +587,26 @@ class Tremelo(AudioEffect):
         super(Tremelo, self).__init__()
         self.parameters = {'Speed':Parameter(float, 3.0, 10.0, 5.0),
                            'Intensity':Parameter(float, 0.0, 0.8, 0.25)}
-        self._old_speed = 0.0
-        self._old_intensity = 0.0
-        self._old_data_size = 0
+        self.parameters['Speed'].value_changed.connect(self.param_changed_event)
+        self.parameters['Intensity'].value_changed.connect(self.param_changed_event)
+        
+        self._mod = None
+        self.param_changed_event()
     
-    def process_data(self, data):
+    def param_changed_event(self):
         speed = self.parameters['Speed'].value
         intensity = self.parameters['Intensity'].value
         
-        if (self._old_speed != speed or self._old_intensity != intensity):
-            # create the modification array as a sine wave. At max, the tremelo
-            # speed will be 1 second and intensity ranges from 0 to 1.
-            self._old_speed = speed
-            self._old_intensity = intensity
-            
-            self._mod = np.add(1 - intensity, np.multiply(intensity, np.cos(
+        self._mod = np.add(1 - intensity, np.multiply(intensity, np.cos(
                 np.linspace(0, 2 * np.pi, num=((1 / speed) * SAMPLE_RATE),
                             endpoint=True))))
-        else:
-            self._mod = np.roll(self._mod, -self._old_data_size)
-        
-        self._old_data_size = data.size
-        return np.multiply(data, np.resize(self._mod, (data.size,)))
+    
+    def process_data(self, data):
+        out = np.multiply(data, np.resize(self._mod, (data.size,)))
+        self._mod = np.roll(self._mod, -data.size)
+        return out
 
 #this tuple needs to be maintained manually
-available_effects = (Decimation, Delay, FoldbackDistortion, Fuzzer, Gain,
-                     GenericFilter, HysteresisGate, LowPass, LowPassButterworth,
+available_effects = (Chorus, Decimation, Delay, FoldbackDistortion, Fuzzer, Gain,
+                     GenericFilter, HysteresisGate, LowPassButterworth,
                      Overdrive, Passthrough, PulseModulation, Reverb, Tremelo)
