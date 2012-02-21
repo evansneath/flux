@@ -575,18 +575,25 @@ class Tremelo(AudioEffect):
         if shape == 'Sin':
             self.carrier = np.sin(np.linspace(0, 2 * np.pi, period))
         elif shape == 'Sawtooth':
-            self.carrier = np.linspace(0, 1, period / 2)
+            sawtooth = np.linspace(0, 1, period / 2)
             #smooth out the wave a bit by multiplying it with it's complement raised to a large power
-            complement = (np.power(1 - self.carrier, 10))
-            np.multiply(self.carrier, complement)
+            complement = 1 - np.power(sawtooth, 20)
+            #this is 1 / max(complement) when the exponent is 20, and is used to keep a constant maximum amplitude 
+            normalization_factor = 1.2226448438558761 
+            self.carrier = sawtooth * complement * normalization_factor
         elif shape == 'Square':
-            self.carrier = np.concatenate([np.ones(period / 2), np.zeros(period / 2)])
+            #create a rounded square wave by multiplying 1-sawtooth(-x)**20, which rises sharply at x=0
+            #   and 1-sawtooth(x)**20, which falls sharply at the half period
+            sawtooth = np.linspace(0, 1, period / 2)
+            sawtooth_neg = np.linspace(1, 0, period / 2)
+            square = (1 - np.power(sawtooth, 20)) * (1 - np.power(sawtooth_neg, 20))
+            self.carrier = np.concatenate([square, np.zeros(period / 2)])
         else:
-            print 'Error: carrier shape incorrect'
+            print 'Error, unknown carrier shape:', shape
         
     def process_data(self, data):
         mix = self.parameters['Mix'].value
-        wet = np.multiply(data, np.resize(self.carrier, data.size))
+        wet = data * np.resize(self.carrier, data.size)
         self.carrier = np.roll(self.carrier, -data.size)
         
         return ((1 - mix) * data) + (mix * wet)
