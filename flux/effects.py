@@ -8,7 +8,7 @@ import collections
 import numpy as np
 import scipy.signal as signal
 
-from PySide import QtCore, QtGui, QtMultimedia
+from PySide import QtCore, QtMultimedia
 
 SAMPLE_MAX = 32767
 SAMPLE_MIN = -(SAMPLE_MAX + 1)
@@ -108,7 +108,7 @@ class Parameter(QtCore.QObject):
         inverted -- If True, a slider at the highest position will produce the minimum value and vice versa.
     """
     
-    #Signal emmited when value member changes
+    #Signal emited when value member changes
     value_changed = QtCore.Signal()
     
     def __init__(self, type=int, minimum=0, maximum=100, value=10, inverted=False):
@@ -160,6 +160,21 @@ class TempoParameter(Parameter):
         
     def set_use_bpm(self, value):
         self.use_bpm = value
+
+class DiscreteParameter(Parameter):
+    """A Parameter with a set of discrete values instead of a range.
+    
+    Members:
+        choices_dict -- a dictionary mapping names of available choices to their
+                        optional icon file path if no icon is desired, the path
+                        should be an empty string
+        value        -- the name currently selected choice
+    """
+
+    def __init__(self, choices_dict, value):
+        super(DiscreteParameter, self).__init__()
+        self.choices_dict = collections.OrderedDict(choices_dict)
+        self._value = value
 
 class AudioEffect(QtCore.QObject):
     """Base class for audio effects."""
@@ -318,7 +333,7 @@ class Gain(AudioEffect):
     
     def __init__(self):
         super(Gain, self).__init__()
-        self.parameters = {'Amount':Parameter(float, 0, 10, 1)}
+        self.parameters = {'Amount':Parameter(float, 0, 15, 1)}
     
     def process_data(self, data):
         return np.multiply(data, self.parameters['Amount'].value)
@@ -494,7 +509,13 @@ class Passthrough(AudioEffect):
         super(Passthrough, self).__init__()
         self.parameters = {'Param':Parameter(float, 0, 10, 5),
                            'TempoParam 1':TempoParameter(),
-                           'TempoParam 2':TempoParameter()}
+                           #'TempoParam 2':TempoParameter(),
+                           #'Param2':Parameter(float, 0, 10, 5)}
+                           'Style':DiscreteParameter({'Choice 1':'res/icons/control_play.png',
+                                                      'Choice 2':'res/icons/wave_sine.png',
+                                                      'Choice 3':'res/icons/wave_square.png',
+                                                      '#4':''},
+                                                    'Choice 2')}
 
 class PulseModulation(AudioEffect):
     """Pulse Width Modulation effect.
@@ -577,36 +598,57 @@ class Tremelo(AudioEffect):
     """Tremelo effect.
     
     Parameters:
-        speed -- The length of a cycle of the tremelo. [s]
-        intensity -- The of the signal magnitude varied by the tremelo. [%]
+        Speed -- The length of a period of the carrier signal.
+        Shape -- The waveform of the carrier signal.
+        Mix   -- The Wet/Dry mix ratio.
     """
     name = 'Tremelo'
-    description = 'Modulates the time signal with sinusoidal wave, creating a vibrato effect.'
+    description = 'Modulates the time signal, creating a vibrato effect.'
     
     def __init__(self):
         super(Tremelo, self).__init__()
-        self.parameters = {'Speed':Parameter(float, 3.0, 10.0, 5.0),
-                           'Intensity':Parameter(float, 0.0, 0.8, 0.25)}
-        self.parameters['Speed'].value_changed.connect(self.param_changed_event)
-        self.parameters['Intensity'].value_changed.connect(self.param_changed_event)
+        self.carrier = None        
+        self.parameters = {'Speed':Parameter(float, 2.0, 20.0, 5.0),
+                           'Mix':Parameter(float, 0.0, 1, 0.25),
+                           'Shape':DiscreteParameter({'Sin':'res/icons/wave_sine.png',
+                                                      'Sawtooth':'res/icons/wave_saw.png',
+                                                      'Square':'res/icons/wave_square.png'},
+                                                    'Sin')}
+        self.parameters['Speed'].value_changed.connect(self.carrier_changed_event)
+        self.parameters['Shape'].value_changed.connect(self.carrier_changed_event)
+        self.carrier_changed_event()
         
-        self._mod = None
-        self.param_changed_event()
-    
-    def param_changed_event(self):
-        speed = self.parameters['Speed'].value
-        intensity = self.parameters['Intensity'].value
+    def carrier_changed_event(self):
+        shape = self.parameters['Shape'].value
+        period = SAMPLE_RATE /  self.parameters['Speed'].value
         
-        self._mod = np.add(1 - intensity, np.multiply(intensity, np.cos(
-                np.linspace(0, 2 * np.pi, num=((1 / speed) * SAMPLE_RATE),
-                            endpoint=True))))
-    
+        if shape == 'Sin':
+            self.carrier = np.sin(np.linspace(0, 2 * np.pi, period))
+        elif shape == 'Sawtooth':
+            sawtooth = np.linspace(0, 1, period / 2)
+            #smooth out the wave a bit by multiplying it with it's complement raised to a large power
+            complement = 1 - np.power(sawtooth, 20)
+            #this is 1 / max(complement) when the exponent is 20, and is used to keep a constant maximum amplitude 
+            normalization_factor = 1.2226448438558761 
+            self.carrier = sawtooth * complement * normalization_factor
+        elif shape == 'Square':
+            #create a rounded square wave by multiplying 1-sawtooth(-x)**20, which rises sharply at x=0
+            #   and 1-sawtooth(x)**20, which falls sharply at the half period
+            sawtooth = np.linspace(0, 1, period / 2)
+            sawtooth_neg = np.linspace(1, 0, period / 2)
+            square = (1 - np.power(sawtooth, 20)) * (1 - np.power(sawtooth_neg, 20))
+            self.carrier = np.concatenate([square, np.zeros(period / 2)])
+        else:
+            print 'Error, unknown carrier shape:', shape
+        
     def process_data(self, data):
-        out = np.multiply(data, np.resize(self._mod, (data.size,)))
-        self._mod = np.roll(self._mod, -data.size)
-        return out
+        mix = self.parameters['Mix'].value
+        wet = data * np.resize(self.carrier, data.size)
+        self.carrier = np.roll(self.carrier, -data.size)
+        
+        return ((1 - mix) * data) + (mix * wet)
 
 #this tuple needs to be maintained manually
 available_effects = (Chorus, Decimation, Delay, FoldbackDistortion, Fuzzer, Gain,
-                     GenericFilter, HysteresisGate, LowPassButterworth,
-                     Overdrive, Passthrough, PulseModulation, Reverb, Tremelo)
+                     HysteresisGate, LowPass, NoiseGate, Overdrive, Passthrough,
+                     Reverb, Tremelo)
