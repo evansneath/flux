@@ -122,6 +122,9 @@ class Parameter(QtCore.QObject):
         self._value = value
         self.inverted = inverted
         
+    def __repr__(self):
+        return '%s(%s, %s, %s, %s, %i)' % (self.__class__.__name__, self.type, self.minimum, self.maximum, self.value, self.inverted)
+        
     @property
     def value(self):
         return self._value
@@ -250,7 +253,7 @@ class Delay(AudioEffect):
                            'Feedback':Parameter(float, 0, 1.1, .5)} #maximum feedback slightly greater than 1, be careful
         
         self.delay_line = None
-        self.value_changed_event()
+        self.delay_changed_event()
         
         self.parameters['Delay'].value_changed.connect(self.delay_changed_event)
 
@@ -602,3 +605,4 @@ class Tremelo(AudioEffect):
 available_effects = (Decimation, Delay, FoldbackDistortion, Fuzzer, Gain,
                      HysteresisGate, LowPass, NoiseGate, Overdrive, Passthrough,
                      PulseModulation, Reverb, Tremelo)
+
