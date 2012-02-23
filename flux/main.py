@@ -544,7 +544,8 @@ class FluxWindow(QtGui.QMainWindow):
         self.audio_path.effects = [i.widget().effect for i in panel.layout.itemList]
         
     def save_effects(self):
-        effects = {effect.name:{name:param.value for name,param in effect.parameters.iteritems()} for effect in self.audio_path.effects}
+        effects = [(effect.name, {name:param.value for name, param in effect.parameters.iteritems()}) for effect in self.audio_path.effects]
+        
         file_name, file_ext = QtGui.QFileDialog.getSaveFileName(self, 'Save File', self.central_widget.current_tab_text(), 'Effect Save File (*.fxs)')
         
         if file_name:
@@ -559,7 +560,7 @@ class FluxWindow(QtGui.QMainWindow):
             if ext == '.fxs':
                 self.central_widget.add_tab(name)
                 with open(file_name) as f:
-                    for effect_name, parameters in json.load(f).iteritems():
+                    for effect_name, parameters in json.load(f):
                         effect = self.add_effect(effect_name, parameters)
 
 if __name__ == '__main__':
