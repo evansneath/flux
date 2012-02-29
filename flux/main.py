@@ -398,10 +398,6 @@ class TempoWidget(QtGui.QWidget):
         self.bpm_entry.setValidator(QtGui.QIntValidator(1, 999, self.bpm_entry))
         self.layout.addWidget(self.bpm_entry)
         
-        #self.button = QtGui.QPushButton(QtGui.QIcon('res/icons/time_go.png'), '')
-        #self.layout.addWidget(self.button)
-        #self.button.clicked.connect(self.update_tempo)
-        
         self.tempo_times = collections.deque(maxlen=5)
         
     def update_tempo(self):
@@ -446,8 +442,10 @@ class FluxWindow(QtGui.QMainWindow):
             
         self.effect_list.itemDoubleClicked.connect(self.effect_list_item_selected)
             
-        #set the default size for the sidebar
-        self.effect_list.sizeHint = lambda: QtCore.QSize(125, 250)
+            
+        #set the default size for the sidebar based on current font size
+        font_width = self.fontMetrics().width('W')
+        self.effect_list.sizeHint = lambda: QtCore.QSize(font_width * 12, 250)
         self.effect_dock.setWidget(self.effect_list)
         self.effect_dock.setFeatures(QtGui.QDockWidget.DockWidgetMovable|QtGui.QDockWidget.DockWidgetFloatable)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.effect_dock)

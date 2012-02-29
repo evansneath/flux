@@ -45,7 +45,7 @@ QTabBar::close-button:pressed {
     max-width:7em;
 }
 #use_bpm_button {
-    max-width:3.5em;
+    max-width:4em;
 }
 #add_tab_button {
     padding:6px 3px;
