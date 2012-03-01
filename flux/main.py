@@ -13,6 +13,7 @@ import numpy
 from PySide import QtCore, QtGui, QtMultimedia
 
 import effects
+import backend
 
 class FlowLayout(QtGui.QLayout):
     """Flow layout taken from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
@@ -424,7 +425,7 @@ class FluxWindow(QtGui.QMainWindow):
         super(FluxWindow, self).__init__()
         
         self.app = app
-        self.audio_path = effects.AudioPath(app)
+        self.audio_path = backend.AudioPath(app)
         
         self.setWindowTitle('Flux Audio Effects')
         
