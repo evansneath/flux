@@ -12,7 +12,7 @@ from PySide import QtCore, QtMultimedia
 
 SAMPLE_MAX = 32767
 SAMPLE_MIN = -(SAMPLE_MAX + 1)
-SAMPLE_RATE = 44100 # [Hz]
+SAMPLE_RATE = 44100. # [Hz]
 NYQUIST = SAMPLE_RATE / 2
 SAMPLE_SIZE = 16 # [bit]
 CHANNEL_COUNT = 1
@@ -73,7 +73,7 @@ class AudioPath(QtCore.QObject):
         data = np.fromstring(self.source.readAll(), 'int16').astype(float)
         
         if self.processing_enabled:
-            #t1 = time.clock() #for performance timing
+            t1 = time.clock() #for performance timing
             
             for effect in self.effects:
                 if len(data): #empty arrays cause a crash
@@ -81,11 +81,11 @@ class AudioPath(QtCore.QObject):
                     
             ####
             ##processing performace timing
-            #t2 = time.clock() 
-            #self.ts.append(t2-t1)
-            #if len(self.ts) % 100 == 0:
-            #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-            #    self.ts = []
+            t2 = time.clock() 
+            self.ts.append(t2-t1)
+            if len(self.ts) % 100 == 0:
+                print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
+                self.ts = []
             ####
             ##time between on_ready_read calls
             #self.ts.append(time.clock())
@@ -194,22 +194,6 @@ class AudioEffect(QtCore.QObject):
         """
         return data
 
-class Chorus(AudioEffect):
-    name = 'Chorus'
-    description = 'Frequency shifting to attain multiinstrumental sound'
-    
-    def __init__(self):
-        super(Chorus, self).__init__()
-        self.parameters = {'Shift':Parameter(float, 1, 500, 5)}
-    
-    def process_data(self, data):
-        padded_data_size = data.size * 10 # zero pad to increase num of elements in freq array
-        spectrum = np.fft.rfft(data, n=padded_data_size)
-        freq = np.fft.fftfreq(padded_data_size, d=1.0/float(SAMPLE_RATE))
-        # add signal to several freq shifted clones of the original
-        spectrum = np.add(spectrum, np.add(np.roll(spectrum, 3), np.roll(spectrum, -3)))
-        return np.resize(np.fft.irfft(spectrum, n=data.size*10), data.size)
-
 class Compressor(AudioEffect):
     name = 'Compressor'
     description = 'Hard Knee, Instant Attack'
@@ -233,8 +217,8 @@ class Decimation(AudioEffect):
     """Decimation / Bitcrushing effect.
         
     Parameters:
-        bits -- Amount of bit accuracy in the output data.
-        rate -- Sample rate of the output data.
+        bits -- Amount of bit accuracy in the output data. [-]
+        rate -- Sample rate of the output data. [Hz]
     """
     name = 'Decimation'
     description = 'Reduce signal sample rate and/or bit accuracy'
@@ -307,8 +291,8 @@ class Fuzzer(AudioEffect):
     """FuzzFace based on model at http://www.geofex.com/effxfaq/distn101.htm
     
     Parameters:
-        Amount --   A factor from 0 to 5.0 representing the 
-                     amount of distortion to add."""
+        Amount -- A factor from 0 to 5.0 representing the amount of distortion to add. [-]
+    """
     name = 'Fuzzer'
     description = 'Asymetrical distortion'
     
@@ -403,7 +387,7 @@ class LowPass(AudioEffect):
     """Creates a low-pass filter using windowing in frequency domain.
     
     Parameters:
-        cutoff -- The frequency to pass through. All higher frequencies are cut off.
+        cutoff -- The frequency to pass through. All higher frequencies are cut off. [Hz]
     """
     
     name = 'Low-Pass Filter'
@@ -434,7 +418,7 @@ class LowPassButterworth(AudioEffect):
     """Creates a low-pass filter using an IIR butterworth filter design.
     
     Parameters:
-        cutoff -- The frequency to pass through. All higher frequencies are cut off.
+        cutoff -- The frequency to pass through. All higher frequencies are cut off. [Hz]
     """
     
     name = 'Low-Pass Butterworth Filter'
@@ -449,8 +433,6 @@ class LowPassButterworth(AudioEffect):
         
         self._a = None
         self._b = None
-        self._initialized = False
-        self._overflow = np.array([])
         self.param_changed_event()
     
     def param_changed_event(self):
@@ -462,21 +444,9 @@ class LowPassButterworth(AudioEffect):
         
         (order, omega_n) = signal.filter_design.buttord(omega_p, omega_s, 3, 15, analog=0)
         (self._b, self._a) = signal.filter_design.butter(order, omega_n, btype='low', analog=0, output='ba')
-        
-        if self._initialized is False:
-            if self._a.size > self._b.size: zero_len = self._a.size - 1
-            else: zero_len = self._b.size - 1
-            self._overflow = np.zeros(zero_len)
-            self._initialized = True
-        
-        ### TEST BLOCK ###
-        #print 'Wp=', omega_p, ' Ws=', omega_s, ' ord=', order
-        ##################
     
     def process_data(self, data):
-        (out, self._overflow) = signal.lfilter(self._b, self._a, data, axis=0, zi=self._overflow)
-        #print 'overflow.size=', self._overflow.size, 'overflow=', self._overflow
-        return out
+        return signal.lfilter(self._b, self._a, data, axis=0)
 
 class Overdrive(AudioEffect):
     name = 'Overdrive'
@@ -517,42 +487,32 @@ class Passthrough(AudioEffect):
                                                       '#4':''},
                                                     'Choice 2')}
 
-class PulseModulation(AudioEffect):
-    """Pulse Width Modulation effect.
-    
-    Parameters:
-        duration  -- The time of the total cycle (on + off time). [s]
-        duty      -- The percentage of on time of the signal. [%]
-        intensity -- The level of dropoff of the signal on the low cycle. [-]
-    """
-    name = 'Pulse Modulation'
-    description = 'Introduces pulse width modulation to the signal.'
+class PitchShift(AudioEffect):
+    name = 'PitchShift'
+    description = 'Frequency shifting in the time domain'
     
     def __init__(self):
-        super(PulseModulation, self).__init__()
-        self.parameters = {'Duration':Parameter(float, 0.0001, 1.0, 0.25),
-                           'Duty':Parameter(float, 0.0001, 1.0, 0.5),
-                           'Intensity':Parameter(float, 0.0001, 0.9, 0.5, True)}
-        self.parameters['Duration'].value_changed.connect(self.param_changed_event)
-        self.parameters['Duty'].value_changed.connect(self.param_changed_event)
-        self.parameters['Intensity'].value_changed.connect(self.param_changed_event)
-        
-        self._mod = None
+        super(PitchShift, self).__init__()
+        self.parameters = {'Frequency':Parameter(float, 1, 1000, 5)}
+        self.parameters['Frequency'].value_changed.connect(self.param_changed_event)
+        self._mod_sin = None
+        self._mod_cos = None
         self.param_changed_event()
     
     def param_changed_event(self):
-        total_samples = self.parameters['Duration'].value * SAMPLE_RATE
-        active_samples = math.floor(total_samples * self.parameters['Duty'].value)
-        inactive_samples = total_samples - active_samples
-        
-        self._mod = np.concatenate([np.ones(active_samples),
-                                    np.add(np.zeros(inactive_samples),
-                                           self.parameters['Intensity'].value)])
+        f = self.parameters['Frequency'].value
+        self._mod_sin = np.sin(np.linspace(0, 2*np.pi, num=SAMPLE_RATE/f, endpoint=False))
+        self._mod_cos = np.cos(np.linspace(0, 2*np.pi, num=SAMPLE_RATE/f, endpoint=False))
     
     def process_data(self, data):
-        out = np.multiply(data, np.resize(self._mod, (data.size,)))
-        self._mod = np.roll(self._mod, data.size)
-        return out
+        # SSB-AM <=> Single-Side Band Amplitude Modulation Method
+        # output = data*Cos(2pi*Fc*t) - HilbertXF(data)*Sin(2pi*Fc*t)
+        part1 = np.multiply(data, np.resize(self._mod_cos, data.size))
+        part2 = np.multiply(signal.hilbert(data), np.resize(self._mod_sin, data.size))
+        self._mod_sin = np.roll(self._mod_sin, data.size)
+        self._mod_cos = np.roll(self._mod_cos, data.size)
+        return np.subtract(part1, part2).real
+        #return (part1.real, part2.real)
 
 class Reverb(AudioEffect):
     """Reverberation effect.
@@ -607,7 +567,9 @@ class Tremelo(AudioEffect):
     
     def __init__(self):
         super(Tremelo, self).__init__()
-        self.carrier = None        
+        
+        self.carrier = None
+        
         self.parameters = {'Speed':Parameter(float, 2.0, 20.0, 5.0),
                            'Mix':Parameter(float, 0.0, 1, 0.25),
                            'Shape':DiscreteParameter({'Sin':'res/icons/wave_sine.png',
@@ -623,7 +585,7 @@ class Tremelo(AudioEffect):
         period = SAMPLE_RATE /  self.parameters['Speed'].value
         
         if shape == 'Sin':
-            self.carrier = np.sin(np.linspace(0, 2 * np.pi, period))
+            self.carrier = np.sin(np.linspace(0, np.pi, period / 2))
         elif shape == 'Sawtooth':
             sawtooth = np.linspace(0, 1, period / 2)
             #smooth out the wave a bit by multiplying it with it's complement raised to a large power
@@ -649,6 +611,6 @@ class Tremelo(AudioEffect):
         return ((1 - mix) * data) + (mix * wet)
 
 #this tuple needs to be maintained manually
-available_effects = (Chorus, Decimation, Delay, FoldbackDistortion, Fuzzer, Gain,
-                     HysteresisGate, LowPass, NoiseGate, Overdrive, Passthrough,
-                     Reverb, Tremelo)
+available_effects = (Decimation, Delay, FoldbackDistortion, Fuzzer, Gain,
+                     HysteresisGate, LowPassButterworth, NoiseGate, Overdrive,
+                     Passthrough, PitchShift, Reverb, Tremelo)
