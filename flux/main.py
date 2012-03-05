@@ -183,6 +183,28 @@ class FluxCentralWidget(QtGui.QTabWidget):
         else:
             print "Warning: can't add widget if there are no tabs"
             
+    def add_effect(self, name, param_values={}):
+        """Add an effect widget by name.
+        
+        Parameters:
+            name         -- the name of the effect to add
+            param_values -- optional dictionary of parameter names to values that
+                            will override the default values
+        """
+        for effect_class in effects.available_effects:
+            if effect_class.name == name:
+                effect = effect_class()
+                for param, value in param_values.iteritems():
+                    try:
+                        effect.parameters[param].value = value
+                    except KeyError:
+                        print 'Error:', name, 'has no parameter', param
+                
+                widget = EffectWidget(effect)
+                self.add_widget(widget)
+                widget.title_bar.exit_btn.clicked.connect(lambda: self.remove_widget(widget))
+                return widget
+            
     def move_widget(self, index, new_index):
         l = self.currentWidget().layout.itemList
         widget = l.pop(index)
@@ -231,7 +253,10 @@ class FluxCentralWidget(QtGui.QTabWidget):
             drag.start(QtCore.Qt.MoveAction)
         
     def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat('application/effect_widget'):
+        mime_data = event.mimeData()
+        if mime_data.hasFormat('application/effect_widget'):
+            event.accept()
+        elif mime_data.hasFormat('application/list-widget-text'):
             event.accept()
         else:
             event.ignore()
@@ -240,12 +265,18 @@ class FluxCentralWidget(QtGui.QTabWidget):
         self.drag_indicator.hide()
                 
     def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat('application/effect_widget'):
+        mime_data = event.mimeData()
+        if (mime_data.hasFormat('application/effect_widget') or
+            mime_data.hasFormat('application/list-widget-text')):
             widget = self._effect_widget_at(event.pos())
             if widget is None:
-                #place the indicator to the right of the last widget
-                widget = self.currentWidget().layout.itemList[-1].widget()
-                pos = widget.pos() + self._drag_indicator_offset + QtCore.QPoint(widget.width(), 0)
+                if self.currentWidget().layout.itemList:
+                    #place the indicator to the right of the last widget
+                    widget = self.currentWidget().layout.itemList[-1].widget()
+                    pos = widget.pos() + self._drag_indicator_offset + QtCore.QPoint(widget.width(), 0)
+                else:
+                    #no widget are in the preset yet
+                    pos = self._drag_indicator_offset
             else:
                 pos = widget.pos() + self._drag_indicator_offset
             
@@ -258,7 +289,11 @@ class FluxCentralWidget(QtGui.QTabWidget):
             
     def dropEvent(self, event):
         layout = self.currentWidget().layout
-        original_index = layout.widget_index(self.drag_widget)
+        if event.mimeData().hasFormat('application/list-widget-text'):
+            self.add_effect(event.mimeData().text())
+            original_index = -1
+        else:
+            original_index = layout.widget_index(self.drag_widget)
         widget = self._effect_widget_at(event.pos())
         if widget is not None:
             new_index = layout.widget_index(widget)
@@ -419,7 +454,38 @@ class TempoWidget(QtGui.QWidget):
                 prev = elem
             interval = s / float(len(self.tempo_times) - 1)
             self.bpm_entry.setText(str(int(60/interval))) #60/(s per beat) = bpm
-                
+            
+class FluxListWidget(QtGui.QListWidget):
+    def __init__(self):
+        super(FluxListWidget, self).__init__()
+        
+    def add_effects(self, effect_classes):
+        """Adds a list of AudioEffect suclasses' names to the view."""
+        for effect in effect_classes:
+            item = QtGui.QListWidgetItem(effect.name)
+            item.setToolTip(effect.description)
+            self.addItem(item)
+            
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.drag_start_pos = event.pos()
+        super(FluxListWidget, self).mousePressEvent(event)
+        
+    def mouseMoveEvent(self, event):
+        """If the user has moved far enough, start a drag."""
+        if (event.buttons() & QtCore.Qt.LeftButton and
+            (event.pos() - self.drag_start_pos).manhattanLength() >= QtGui.QApplication.startDragDistance()):
+            item = self.currentItem()
+            if item:
+                mime_data = QtCore.QMimeData()
+                mime_data.setData('application/list-widget-text', '')
+                mime_data.setText(item.text())
+                drag = QtGui.QDrag(self)
+                drag.setMimeData(mime_data)
+                drag.start(QtCore.Qt.MoveAction)
+        
+        super(FluxListWidget, self).mouseMoveEvent(event)
+        
 class FluxWindow(QtGui.QMainWindow):
     def __init__(self, app):
         super(FluxWindow, self).__init__()
@@ -434,19 +500,13 @@ class FluxWindow(QtGui.QMainWindow):
             
         #create a dock widget and populate it with available effects
         self.effect_dock = QtGui.QDockWidget('Available Effects')
-        self.effect_list = QtGui.QListWidget()
-        
-        for effect in effects.available_effects:
-            item = QtGui.QListWidgetItem(effect.name)
-            item.setToolTip(effect.description)
-            self.effect_list.addItem(item)
-            
+        self.effect_list = FluxListWidget()
+        self.effect_list.add_effects(effects.available_effects)
         self.effect_list.itemDoubleClicked.connect(self.effect_list_item_selected)
-            
             
         #set the default size for the sidebar based on current font size
         font_width = self.fontMetrics().width('W')
-        self.effect_list.sizeHint = lambda: QtCore.QSize(font_width * 12, 250)
+        self.effect_list.sizeHint = lambda: QtCore.QSize(font_width * 15, 250)
         self.effect_dock.setWidget(self.effect_list)
         self.effect_dock.setFeatures(QtGui.QDockWidget.DockWidgetMovable|QtGui.QDockWidget.DockWidgetFloatable)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.effect_dock)
@@ -482,7 +542,7 @@ class FluxWindow(QtGui.QMainWindow):
         self.central_widget.widgets_changed.connect(self.update_audio_path)
         
     def sizeHint(self):
-        return QtCore.QSize(600, 400)
+        return QtCore.QSize(800, 600)
 
     def play_btn_event(self):
         self.audio_path.start()
@@ -506,37 +566,7 @@ class FluxWindow(QtGui.QMainWindow):
         self.central_widget.rename_tab()
         
     def effect_list_item_selected(self, list_item):
-        self.add_effect(list_item.text())
-            
-    def add_effect(self, name, param_values={}):
-        """Add an effect widget by name.
-        
-        Parameters:
-            name         -- the name of the effect to add
-            param_values -- optional dictionary of parameter names to values that
-                            will override the default values
-        """
-        for effect_class in effects.available_effects:
-            if effect_class.name == name:
-                effect = effect_class()
-                for param, value in param_values.iteritems():
-                    try:
-                        effect.parameters[param].value = value
-                    except KeyError:
-                        print 'Error:', name, 'has no parameter', param
-                
-                self.audio_path.effects.append(effect)
-                widget = EffectWidget(effect)
-                self.central_widget.add_widget(widget)
-                widget.title_bar.exit_btn.clicked.connect(lambda: self.remove_effect_widget(widget))
-                return widget
-            
-    def remove_effect_widget(self, widget):
-        try:
-            self.audio_path.effects.remove(widget.effect)
-        except ValueError as err:
-            print 'Info: effect already removed'
-        self.central_widget.remove_widget(widget)
+        self.central_widget.add_effect(list_item.text())
             
     def update_audio_path(self):
         panel = self.central_widget.currentWidget()
@@ -560,7 +590,7 @@ class FluxWindow(QtGui.QMainWindow):
                 self.central_widget.add_tab(name)
                 with open(file_name) as f:
                     for effect_name, parameters in json.load(f):
-                        effect = self.add_effect(effect_name, parameters)
+                        effect = self.central_widget.add_effect(effect_name, parameters)
 
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
