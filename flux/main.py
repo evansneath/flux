@@ -105,13 +105,28 @@ class FlowLayout(QtGui.QLayout):
         return y + lineHeight - rect.y()
         
         
+class FluxTabBar(QtGui.QTabBar):
+    def __init__(self):
+        super(FluxTabBar, self).__init__()
+        
+        #allow context menus for tabs
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        
+    def mouseReleaseEvent(self, event):
+        #Middle mouse button closes tabs
+        if event.button() == QtCore.Qt.MidButton:           
+            self.tabCloseRequested.emit(self.tabAt(event.pos()))
+        
 class FluxCentralWidget(QtGui.QTabWidget):
     widgets_changed = QtCore.Signal()
+    tab_save_requested = QtCore.Signal((int,))
     
     _drag_indicator_offset = QtCore.QPoint(0, 13)
     
     def __init__(self):
         super(FluxCentralWidget, self).__init__()
+        
+        self.setTabBar(FluxTabBar())
         
         self.drag_widget = None
         
@@ -130,8 +145,27 @@ class FluxCentralWidget(QtGui.QTabWidget):
         self.tabCloseRequested.connect(self.remove_tab)
         self.currentChanged.connect(self.current_changed_event)
         
+        #add context menus to tabs
+        self.tabBar().customContextMenuRequested.connect(self.tab_bar_context_menu_event)
+        
         self.add_tab()
         
+    def tab_bar_context_menu_event(self, pos):
+        index = self.tabBar().tabAt(pos)
+        if index > -1:
+            menu = QtGui.QMenu()
+            save_action = menu.addAction("Save")
+            rename_action = menu.addAction("Rename")
+            close_action = menu.addAction("Close")
+            
+            action = menu.exec_(self.tabBar().mapToGlobal(pos))
+            if action == save_action:
+                self.tab_save_requested.emit(index)
+            elif action == rename_action:
+                self.rename_tab(index)
+            elif action == close_action:
+                self.remove_tab(index)
+            
     def current_changed_event(self, index):
         if index >= 0:
             self.widgets_changed.emit()
@@ -151,6 +185,18 @@ class FluxCentralWidget(QtGui.QTabWidget):
         if self.count() == 0:
             self.add_tab()
             
+    def rename_tab(self, index=None, text=None):
+        if self.count():
+            if index is None:
+                index = self.currentIndex()
+            if text is None:
+                text, ok = QtGui.QInputDialog.getText(self, 'Rename preset', 'Name:',
+                                    QtGui.QLineEdit.Normal, self.tabText(index))
+                if ok and text:
+                    self.setTabText(index, text)
+            else:
+                self.setTabText(index, text)
+            
     def select_next_tab(self):
         if self.count():
             self.setCurrentIndex((self.currentIndex() + 1) % self.count())
@@ -162,19 +208,6 @@ class FluxCentralWidget(QtGui.QTabWidget):
             else:
                 self.setCurrentIndex(self.count() - 1)
                 
-                
-    def current_tab_text(self):
-        return self.tabText(self.currentIndex())
-    
-    def rename_tab(self, text=None):
-        if self.count():
-            if text is None:
-                text, ok = QtGui.QInputDialog.getText(self, 'Rename preset', 'Name:',
-                                    QtGui.QLineEdit.Normal, self.tabText(self.currentIndex()))
-                if ok and text:
-                    self.setTabText(self.currentIndex(), text)
-            else:
-                self.setTabText(self.currentIndex(), text)
                 
     def add_widget(self, widget):
         if self.count():
@@ -518,8 +551,12 @@ class FluxWindow(QtGui.QMainWindow):
         self.toolbar.setFloatable(False)
         self.toolbar.setMovable(False)
         
+        self.pause_action = QtGui.QAction(QtGui.QIcon('res/icons/control_pause.png'), 'Bypass Effects', self.toolbar)
+        self.pause_action.toggled.connect(self.pause_btn_event)
+        self.pause_action.setCheckable(True)
+        
         self.toolbar.addAction(QtGui.QIcon('res/icons/control_play.png'), 'Play', self.play_btn_event)
-        self.toolbar.addAction(QtGui.QIcon('res/icons/control_pause.png'), 'Bypass Effects', self.pause_btn_event)
+        self.toolbar.addAction(self.pause_action)
         self.toolbar.addAction(QtGui.QIcon('res/icons/control_stop.png'), 'Stop', self.stop_btn_event)
         self.toolbar.addSeparator()
         self.toolbar.addAction(QtGui.QIcon('res/icons/save.png'), 'Save', self.save_effects)
@@ -540,6 +577,7 @@ class FluxWindow(QtGui.QMainWindow):
         self.central_widget.setTabsClosable (True)
         self.setCentralWidget(self.central_widget)
         self.central_widget.widgets_changed.connect(self.update_audio_path)
+        self.central_widget.tab_save_requested.connect(self.save_effects)
         
     def sizeHint(self):
         return QtCore.QSize(800, 600)
@@ -547,8 +585,8 @@ class FluxWindow(QtGui.QMainWindow):
     def play_btn_event(self):
         self.audio_path.start()
         
-    def pause_btn_event(self):
-        self.audio_path.processing_enabled = False
+    def pause_btn_event(self, checked):
+        self.audio_path.processing_enabled = checked
         
     def stop_btn_event(self):
         self.audio_path.stop()
@@ -572,10 +610,17 @@ class FluxWindow(QtGui.QMainWindow):
         panel = self.central_widget.currentWidget()
         self.audio_path.effects = [i.widget().effect for i in panel.layout.itemList]
         
-    def save_effects(self):
-        effects = [(effect.name, {name:param.value for name, param in effect.parameters.iteritems()}) for effect in self.audio_path.effects]
+    def save_effects(self, index=None):
+        if index is None:
+            index = self.central_widget.currentIndex()
+            path = self.audio_path.effects
+        else:
+            panel = self.central_widget.widget(index)
+            path = [i.widget().effect for i in panel.layout.itemList]
+            
+        effects = [(effect.name, {name:param.value for name, param in effect.parameters.iteritems()}) for effect in path]
         
-        file_name, file_ext = QtGui.QFileDialog.getSaveFileName(self, 'Save File', self.central_widget.current_tab_text(), 'Effect Save File (*.fxs)')
+        file_name, file_ext = QtGui.QFileDialog.getSaveFileName(self, 'Save File', self.central_widget.tabText(index), 'Effect Save File (*.fxs)')
         
         if file_name:
             with open(file_name, 'w') as f:
@@ -600,7 +645,7 @@ if __name__ == '__main__':
         pedal_thread = PedalThread()
         pedal_thread.left_clicked.connect(window.tab_left_event)
         pedal_thread.right_clicked.connect(window.tab_right_event)
-        pedal_thread.action_clicked.connect(window.tab_right_event)
+        pedal_thread.action_clicked.connect(window.pause_action.toggle)
         pedal_thread.start()
     except NameError:
         #pedal wasn't imported correctly
