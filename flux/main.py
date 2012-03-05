@@ -16,7 +16,7 @@ import effects
 import backend
 
 class FlowLayout(QtGui.QLayout):
-    """Flow layout taken from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
+    """Flow layout modified from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
     def __init__(self, parent=None, margin=0, spacing=-1):
         super(FlowLayout, self).__init__(parent)
 
@@ -121,6 +121,7 @@ class FluxCentralWidget(QtGui.QTabWidget):
     widgets_changed = QtCore.Signal()
     tab_save_requested = QtCore.Signal((int,))
     
+    #this is used to compensate for the size of the tab bar
     _drag_indicator_offset = QtCore.QPoint(0, 13)
     
     def __init__(self):
@@ -308,11 +309,15 @@ class FluxCentralWidget(QtGui.QTabWidget):
                     widget = self.currentWidget().layout.itemList[-1].widget()
                     pos = widget.pos() + self._drag_indicator_offset + QtCore.QPoint(widget.width(), 0)
                 else:
-                    #no widget are in the preset yet
+                    #no widgets are in the preset yet
                     pos = self._drag_indicator_offset
             else:
+                #the cursor is over a widget, start the indicator on the widget's left side
                 pos = widget.pos() + self._drag_indicator_offset
-            
+                if event.pos().x() > widget.pos().x() + (widget.width() / 2):
+                    #place the indicator on the right side of the widget 
+                    pos.setX(pos.x() + widget.width() + self.currentWidget().layout.spacing() - 1)
+                    
             self.drag_indicator.move(pos)
             self.drag_indicator.show()
             
@@ -330,11 +335,16 @@ class FluxCentralWidget(QtGui.QTabWidget):
         widget = self._effect_widget_at(event.pos())
         if widget is not None:
             new_index = layout.widget_index(widget)
+            if event.pos().x() > widget.pos().x() + (widget.width() / 2):
+                #drop the widget to the right of the widget
+                new_index += 1
         else:
             new_index = layout.count()
             
         self.drag_indicator.hide()
-        self.move_widget(original_index, new_index)
+        if widget is not self.drag_widget:
+            #don't move a widget if it was dropped on itself
+            self.move_widget(original_index, new_index)
         
         event.setDropAction(QtCore.Qt.MoveAction)
         event.accept()
