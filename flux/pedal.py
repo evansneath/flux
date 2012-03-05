@@ -23,3 +23,6 @@ class PedalThread(QtCore.QThread):
                 self.right_clicked.emit()
             elif line == 'E':
                 self.action_clicked.emit()
+
+
+        
