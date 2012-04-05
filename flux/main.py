@@ -15,6 +15,9 @@ from PySide import QtCore, QtGui, QtMultimedia
 import effects
 import backend
 
+def bpm_to_ms(bpm):
+    return 60000 / int(bpm)
+
 class FlowLayout(QtGui.QLayout):
     """Flow layout modified from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
     def __init__(self, parent=None, margin=0, spacing=-1):
@@ -459,6 +462,34 @@ class EffectWidget(QtGui.QFrame):
    
     
    
+class FluxEffectListWidget(QtGui.QListWidget):
+    def add_effects(self, effect_classes):
+        """Adds a list of AudioEffect subclasses' names to the view."""
+        for effect in effect_classes:
+            item = QtGui.QListWidgetItem(effect.name)
+            item.setToolTip(effect.description)
+            self.addItem(item)
+            
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.drag_start_pos = event.pos()
+        super(FluxEffectListWidget, self).mousePressEvent(event)
+        
+    def mouseMoveEvent(self, event):
+        """If the user has moved far enough, start a drag."""
+        if (event.buttons() & QtCore.Qt.LeftButton and
+            (event.pos() - self.drag_start_pos).manhattanLength() >= QtGui.QApplication.startDragDistance()):
+            item = self.currentItem()
+            if item:
+                mime_data = QtCore.QMimeData()
+                mime_data.setData('application/list-widget-text', '')
+                mime_data.setText(item.text())
+                drag = QtGui.QDrag(self)
+                drag.setMimeData(mime_data)
+                drag.start(QtCore.Qt.MoveAction)
+        
+        super(FluxEffectListWidget, self).mouseMoveEvent(event)
+        
 class TempoWidget(QtGui.QWidget):
     def __init__(self):
         super(TempoWidget, self).__init__()
@@ -477,9 +508,13 @@ class TempoWidget(QtGui.QWidget):
         self.bpm_entry.setValidator(QtGui.QIntValidator(1, 999, self.bpm_entry))
         self.layout.addWidget(self.bpm_entry)
         
+        self.tap_button = QtGui.QPushButton(QtGui.QIcon('res/icons/time_down.png'), '')
+        self.tap_button.pressed.connect(self.tap_tempo)
+        self.layout.addWidget(self.tap_button)
+        
         self.tempo_times = collections.deque(maxlen=5)
         
-    def update_tempo(self):
+    def tap_tempo(self):
         t = time.clock()
         
         #clear the times if it's been 3 seconds
@@ -498,63 +533,77 @@ class TempoWidget(QtGui.QWidget):
             interval = s / float(len(self.tempo_times) - 1)
             self.bpm_entry.setText(str(int(60/interval))) #60/(s per beat) = bpm
             
-class FluxListWidget(QtGui.QListWidget):
+
+
+class FluxLoopWidget(QtGui.QWidget):
+    record_button_checked = QtCore.Signal()
+    record_button_unchecked = QtCore.Signal()
+    
     def __init__(self):
-        super(FluxListWidget, self).__init__()
+        super(FluxLoopWidget, self).__init__()
         
-    def add_effects(self, effect_classes):
-        """Adds a list of AudioEffect suclasses' names to the view."""
-        for effect in effect_classes:
-            item = QtGui.QListWidgetItem(effect.name)
-            item.setToolTip(effect.description)
-            self.addItem(item)
+        self.setMaximumHeight(50)
+        
+        self.layout = QtGui.QHBoxLayout()
+        self.setLayout(self.layout)
+        
+        self.play_button = QtGui.QPushButton(QtGui.QIcon('res/icons/control_small_play.png'), '')
+        self.pause_button = QtGui.QPushButton(QtGui.QIcon('res/icons/control_small_pause.png'), '')
+        self.stop_button = QtGui.QPushButton(QtGui.QIcon('res/icons/control_small_stop.png'), '')
+        self.record_button = QtGui.QPushButton(QtGui.QIcon('res/icons/control_small_record.png'), '')
+        self.record_button.setCheckable(True)
+        self.record_button.toggled.connect(self._record_toggled_event)
+        
+        for button in self.play_button, self.pause_button, self.stop_button, self.record_button:
+            button.setFlat(True)
             
-    def mousePressEvent(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
-            self.drag_start_pos = event.pos()
-        super(FluxListWidget, self).mousePressEvent(event)
+        self.layout.addWidget(self.play_button)
+        self.layout.addWidget(self.pause_button)
+        self.layout.addWidget(self.stop_button)
+        self.layout.addWidget(self.record_button)
         
-    def mouseMoveEvent(self, event):
-        """If the user has moved far enough, start a drag."""
-        if (event.buttons() & QtCore.Qt.LeftButton and
-            (event.pos() - self.drag_start_pos).manhattanLength() >= QtGui.QApplication.startDragDistance()):
-            item = self.currentItem()
-            if item:
-                mime_data = QtCore.QMimeData()
-                mime_data.setData('application/list-widget-text', '')
-                mime_data.setText(item.text())
-                drag = QtGui.QDrag(self)
-                drag.setMimeData(mime_data)
-                drag.start(QtCore.Qt.MoveAction)
-        
-        super(FluxListWidget, self).mouseMoveEvent(event)
+    def _record_toggled_event(self, checked):
+        if checked:
+            self.record_button_checked.emit()
+        else:
+            self.record_button_unchecked.emit()
         
 class FluxWindow(QtGui.QMainWindow):
     def __init__(self, app):
         super(FluxWindow, self).__init__()
         
-        self.app = app
-        self.audio_path = backend.AudioPath(app)
-        
         self.setWindowTitle('Flux Audio Effects')
         
         with open('res/stylesheet.qss') as style_sheet:
             self.setStyleSheet(style_sheet.read())
+        
+        self.app = app
+        self.audio_path = backend.AudioPath(app)
             
         #create a dock widget and populate it with available effects
         self.effect_dock = QtGui.QDockWidget('Available Effects')
-        self.effect_list = FluxListWidget()
-        self.effect_list.add_effects(effects.available_effects)
-        self.effect_list.itemDoubleClicked.connect(self.effect_list_item_selected)
+        self.effect_list_widget = FluxEffectListWidget()
+        self.effect_list_widget.add_effects(effects.available_effects)
+        self.effect_list_widget.itemDoubleClicked.connect(self.effect_list_item_selected)
             
         #set the default size for the sidebar based on current font size
         font_width = self.fontMetrics().width('W')
-        self.effect_list.sizeHint = lambda: QtCore.QSize(font_width * 15, 250)
-        self.effect_dock.setWidget(self.effect_list)
+        self.effect_list_widget.sizeHint = lambda: QtCore.QSize(font_width * 15, 250)
+        self.effect_dock.setWidget(self.effect_list_widget)
         self.effect_dock.setFeatures(QtGui.QDockWidget.DockWidgetMovable|QtGui.QDockWidget.DockWidgetFloatable)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.effect_dock)
         
-        self.tempo_widget = TempoWidget()
+        #Add the loop dock
+        self.loop_dock = QtGui.QDockWidget('Loop controls')
+        self.loop_dock_widget = FluxLoopWidget()
+        self.loop_dock.setWidget(self.loop_dock_widget)
+        self.loop_dock.setFeatures(QtGui.QDockWidget.DockWidgetMovable|QtGui.QDockWidget.DockWidgetFloatable)
+        self.loop_dock_widget.play_button.clicked.connect(self.audio_path.start_loop_playback)
+        self.loop_dock_widget.stop_button.clicked.connect(self.audio_path.erase_recorded_data)
+        self.loop_dock_widget.stop_button.clicked.connect(lambda:self.loop_dock_widget.record_button.setChecked(False))
+        self.loop_dock_widget.record_button_checked.connect(self.audio_path.start_recording)
+        self.loop_dock_widget.record_button_unchecked.connect(self.audio_path.stop_recording)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.loop_dock)
         
         #create the top toolbar
         self.toolbar = QtGui.QToolBar()
@@ -575,9 +624,8 @@ class FluxWindow(QtGui.QMainWindow):
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_left.png'), 'Next Preset', self.tab_left_event)
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_right.png'), 'Previous Preset', self.tab_right_event)
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_edit.png'), 'Rename Preset', self.rename_tab_event)
-        self.toolbar.addSeparator()
-        self.toolbar.addWidget(self.tempo_widget)
-        self.toolbar.addAction(QtGui.QIcon('res/icons/time_go.png'), 'Tap Tempo', self.tempo_widget.update_tempo)
+
+        self.toolbar.sizeHint = lambda :QtCore.QSize(264, 44)
         
         self.addToolBar(self.toolbar)
         

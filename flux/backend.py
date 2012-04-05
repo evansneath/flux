@@ -11,7 +11,7 @@ class AudioPath(QtCore.QObject):
     Parameters:
     app -- a QApplication or QCoreApplication
     """
-    ts = [] #for performance timing
+    
     def __init__(self, app):
         super(AudioPath, self).__init__()
         
@@ -39,6 +39,32 @@ class AudioPath(QtCore.QObject):
         self.processing_enabled = True
         
         self.effects = []
+        
+        self.recording_loop = False
+        self.playing_loop = False
+        self.interval_size = None
+        self.record_track = None
+        self.playback_track = None
+        
+    def start_recording(self):
+        self.recording_loop = True
+        self.record_track = np.array([])
+    
+    def stop_recording(self):
+        self.recording_loop = False
+        self.playback_track = self.record_track
+        self.record_track = None
+        
+    def start_loop_playback(self, bpm=None):
+        if self.playback_track is not None:
+            self.playing_loop = True
+        
+    def stop_loop_playback(self):
+        self.playing_loop = False
+        
+    def erase_recorded_data(self):
+        self.playing_loop = False
+        self.playback_track = None
     
     def start(self):
         self.processing_enabled = True
@@ -56,27 +82,24 @@ class AudioPath(QtCore.QObject):
         #cast the input data as int32 while it's being processed so that it doesn't get clipped prematurely
         data = np.fromstring(self.source.readAll(), 'int16').astype(float)
         
-        if self.processing_enabled:
-            #t1 = time.clock() #for performance timing
-            
-            for effect in self.effects:
-                if len(data): #empty arrays cause a crash, use len(data) since np.array doesn't have an implicit boolean value
-                    data = effect.process_data(data)
-                    
-            ####
-            ##processing performace timing
-            #t2 = time.clock() 
-            #self.ts.append(t2-t1)
-            #if len(self.ts) % 100 == 0:
-            #    print sum(self.ts) / float(len(self.ts)) * 1000000, 'us'
-            #    self.ts = []
-            ####
-            ##time between on_ready_read calls
-            #self.ts.append(time.clock())
-            #if len(self.ts) % 100 == 0:
-            #    print (sum(self.ts[i] - self.ts[i-1] for i in range(1, len(self.ts))) / (len(self.ts) - 1)) * 1000, 'ms'
-            #    self.ts = []
-            #        
-            ###
+        #empty arrays cause a crash; use len(data) since np.array doesn't have an implicit boolean value
+        if len(data) == 0:
+            return
         
+        if self.processing_enabled:
+            for effect in self.effects:
+                data = effect.process_data(data)
+
+        #add the recorded track to the data
+        if self.playing_loop:
+            data += self.playback_track[:len(data)]
+            self.playback_track = np.roll(self.playback_track, -len(data))
+            
         self.sink.write(data.clip(effects.SAMPLE_MIN, effects.SAMPLE_MAX).astype('int16').tostring())
+        
+        #record the data it's written to the sink to reduce latency
+        if self.recording_loop:
+            self.record_track = np.concatenate((self.record_track, data))
+        
+        
+        
