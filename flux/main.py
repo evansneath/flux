@@ -1,6 +1,8 @@
 import sys
 import time
 import collections
+import json
+import os
 
 try:
     import pedal
@@ -11,6 +13,7 @@ import numpy
 from PySide import QtCore, QtGui, QtMultimedia
 
 import effects
+import backend
 
 class FlowLayout(QtGui.QLayout):
     """Flow layout taken from http://developer.qt.nokia.com/doc/qt-4.8/layouts-flowlayout.html"""
@@ -133,12 +136,13 @@ class FluxCentralWidget(QtGui.QTabWidget):
         if index >= 0:
             self.widgets_changed.emit()
     
-    def add_tab(self):
+    def add_tab(self, title=None):
         tab = QtGui.QWidget()
         tab.layout = FlowLayout(self, 5)
         tab.setLayout(tab.layout)
         
-        title = 'Preset %i' % (self.count() + 1)
+        if title is None:
+            title = 'Preset %i' % (self.count() + 1)
         self.addTab(tab, title)
         self.setCurrentIndex(self.count() - 1)
         
@@ -158,13 +162,20 @@ class FluxCentralWidget(QtGui.QTabWidget):
             else:
                 self.setCurrentIndex(self.count() - 1)
                 
-    def rename_tab(self):
+                
+    def current_tab_text(self):
+        return self.tabText(self.currentIndex())
+    
+    def rename_tab(self, text=None):
         if self.count():
-            text, ok = QtGui.QInputDialog.getText(self, 'Rename preset', 'Name:',
-                                QtGui.QLineEdit.Normal, self.tabText(self.currentIndex()))
-            if ok and text:
+            if text is None:
+                text, ok = QtGui.QInputDialog.getText(self, 'Rename preset', 'Name:',
+                                    QtGui.QLineEdit.Normal, self.tabText(self.currentIndex()))
+                if ok and text:
+                    self.setTabText(self.currentIndex(), text)
+            else:
                 self.setTabText(self.currentIndex(), text)
-        
+                
     def add_widget(self, widget):
         if self.count():
             self.currentWidget().layout.addWidget(widget)
@@ -388,10 +399,6 @@ class TempoWidget(QtGui.QWidget):
         self.bpm_entry.setValidator(QtGui.QIntValidator(1, 999, self.bpm_entry))
         self.layout.addWidget(self.bpm_entry)
         
-        #self.button = QtGui.QPushButton(QtGui.QIcon('res/icons/time_go.png'), '')
-        #self.layout.addWidget(self.button)
-        #self.button.clicked.connect(self.update_tempo)
-        
         self.tempo_times = collections.deque(maxlen=5)
         
     def update_tempo(self):
@@ -418,7 +425,7 @@ class FluxWindow(QtGui.QMainWindow):
         super(FluxWindow, self).__init__()
         
         self.app = app
-        self.audio_path = effects.AudioPath(app)
+        self.audio_path = backend.AudioPath(app)
         
         self.setWindowTitle('Flux Audio Effects')
         
@@ -436,8 +443,10 @@ class FluxWindow(QtGui.QMainWindow):
             
         self.effect_list.itemDoubleClicked.connect(self.effect_list_item_selected)
             
-        #set the default size for the sidebar
-        self.effect_list.sizeHint = lambda: QtCore.QSize(125, 250)
+            
+        #set the default size for the sidebar based on current font size
+        font_width = self.fontMetrics().width('W')
+        self.effect_list.sizeHint = lambda: QtCore.QSize(font_width * 12, 250)
         self.effect_dock.setWidget(self.effect_list)
         self.effect_dock.setFeatures(QtGui.QDockWidget.DockWidgetMovable|QtGui.QDockWidget.DockWidgetFloatable)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.effect_dock)
@@ -452,6 +461,9 @@ class FluxWindow(QtGui.QMainWindow):
         self.toolbar.addAction(QtGui.QIcon('res/icons/control_play.png'), 'Play', self.play_btn_event)
         self.toolbar.addAction(QtGui.QIcon('res/icons/control_pause.png'), 'Bypass Effects', self.pause_btn_event)
         self.toolbar.addAction(QtGui.QIcon('res/icons/control_stop.png'), 'Stop', self.stop_btn_event)
+        self.toolbar.addSeparator()
+        self.toolbar.addAction(QtGui.QIcon('res/icons/save.png'), 'Save', self.save_effects)
+        self.toolbar.addAction(QtGui.QIcon('res/icons/open.png'), 'Open', self.load_effects)
         self.toolbar.addSeparator()
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_left.png'), 'Next Preset', self.tab_left_event)
         self.toolbar.addAction(QtGui.QIcon('res/icons/tab_right.png'), 'Previous Preset', self.tab_right_event)
@@ -476,7 +488,10 @@ class FluxWindow(QtGui.QMainWindow):
         self.audio_path.start()
         
     def pause_btn_event(self):
-        self.audio_path.processing_enabled = False
+        if self.audio_path.processing_enabled == False:
+            self.audio_path.processing_enabled = True
+        else:
+            self.audio_path.processing_enabled = False
         
     def stop_btn_event(self):
         self.audio_path.stop()
@@ -494,14 +509,30 @@ class FluxWindow(QtGui.QMainWindow):
         self.central_widget.rename_tab()
         
     def effect_list_item_selected(self, list_item):
+        self.add_effect(list_item.text())
+            
+    def add_effect(self, name, param_values={}):
+        """Add an effect widget by name.
+        
+        Parameters:
+            name         -- the name of the effect to add
+            param_values -- optional dictionary of parameter names to values that
+                            will override the default values
+        """
         for effect_class in effects.available_effects:
-            if effect_class.name == list_item.text():
+            if effect_class.name == name:
                 effect = effect_class()
+                for param, value in param_values.iteritems():
+                    try:
+                        effect.parameters[param].value = value
+                    except KeyError:
+                        print 'Error:', name, 'has no parameter', param
+                
                 self.audio_path.effects.append(effect)
                 widget = EffectWidget(effect)
                 self.central_widget.add_widget(widget)
                 widget.title_bar.exit_btn.clicked.connect(lambda: self.remove_effect_widget(widget))
-                return
+                return widget
             
     def remove_effect_widget(self, widget):
         try:
@@ -513,16 +544,36 @@ class FluxWindow(QtGui.QMainWindow):
     def update_audio_path(self):
         panel = self.central_widget.currentWidget()
         self.audio_path.effects = [i.widget().effect for i in panel.layout.itemList]
+        
+    def save_effects(self):
+        effects = [(effect.name, {name:param.value for name, param in effect.parameters.iteritems()}) for effect in self.audio_path.effects]
+        
+        file_name, file_ext = QtGui.QFileDialog.getSaveFileName(self, 'Save File', self.central_widget.current_tab_text(), 'Effect Save File (*.fxs)')
+        
+        if file_name:
+            with open(file_name, 'w') as f:
+                json.dump(effects, f)
+        
+    def load_effects(self):
+        file_names, file_types = QtGui.QFileDialog.getOpenFileNames(self, 'Open Files', filter='Effect Save File (*.fxs)')
+        
+        for file_name in file_names:
+            name, ext = os.path.splitext(os.path.split(file_name)[1])
+            if ext == '.fxs':
+                self.central_widget.add_tab(name)
+                with open(file_name) as f:
+                    for effect_name, parameters in json.load(f):
+                        effect = self.add_effect(effect_name, parameters)
 
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
     window = FluxWindow(app)
     
     try:
-        pedal_thread = PedalThread()
+        pedal_thread = pedal.PedalThread()
         pedal_thread.left_clicked.connect(window.tab_left_event)
         pedal_thread.right_clicked.connect(window.tab_right_event)
-        pedal_thread.action_clicked.connect(window.tab_right_event)
+        pedal_thread.action_clicked.connect(window.pause_btn_event)
         pedal_thread.start()
     except NameError:
         #pedal wasn't imported correctly
