@@ -59,7 +59,7 @@ class Tremelo(AudioEffect):
         
         self.carrier = None
         
-        self.parameters = {'Speed':Parameter(float, 2.0, 20.0, 5.0),
+        self.parameters = {'Speed':Parameter(float, 1.0, 10.0, 3.0),
                            'Mix':Parameter(float, 0.0, 1, 0.25),
                            'Shape':DiscreteParameter({'Sin':'res/icons/wave_sine.png',
                                                       'Sawtooth':'res/icons/wave_saw.png',
@@ -94,7 +94,7 @@ class Tremelo(AudioEffect):
         
     def process_data(self, data):
         mix = self.parameters['Mix'].value
-        wet = data * np.resize(self.carrier, data.size)
-        self.carrier = np.roll(self.carrier, -data.size)
+        wet = data * np.resize(self.carrier, len(data))
+        self.carrier = np.roll(self.carrier, -len(data))
         
         return ((1 - mix) * data) + (mix * wet)
