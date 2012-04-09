@@ -26,21 +26,14 @@ class HighPass(AudioEffect):
     def param_changed_event(self):
         # First get order and designed cutoff from specifications
         cutoff = self.parameters['Cutoff'].value
-        transition = cutoff * 0.2 / NYQUIST # Hz / Hz
+        transition = 0.6 # Hz / Hz
         passband = cutoff / NYQUIST # passband frequency
         stopband = passband - transition # stopband frequency
         
         if stopband < 0.0: stopband = 0.01 # clip stopband frequency at 0 Hz
         
-        passband = 0.35 #Hz
-        stopband = 0.5 #Hz
-        gpass = 3
-        gstop = 15
-        
-        order = 3
-        natural = 1000
-        
-        (self._b, self._a) = signal.iirfilter(order, natural, btype='highpass', ftype='butter', output='ba')
+        (order, natural) = signal.filter_design.buttord(passband, stopband, 3, 60, analog=0)
+        (self._b, self._a) = signal.filter_design.butter(order, natural, btype='highpass', analog=0, output='ba')
         self._zi = signal.lfilter_zi(self._b, self._a)
     
     def process_data(self, data):
@@ -72,7 +65,8 @@ class LowPass(AudioEffect):
     def param_changed_event(self):
         # First get order and designed cutoff from specifications
         cutoff = self.parameters['Cutoff'].value
-        transition = 2000 / NYQUIST # Hz / Hz
+        transition = 0.15 # Hz / Hz
+        
         passband = cutoff / NYQUIST # passband frequency
         stopband = passband + transition # stopband frequency
         
@@ -80,7 +74,7 @@ class LowPass(AudioEffect):
             stopband = 0.99 # clip stopband frequency at nyquist frequency
             passband = stopband - transition
         
-        (order, natural) = signal.filter_design.buttord(passband, stopband, 3, 16, analog=0)
+        (order, natural) = signal.filter_design.buttord(passband, stopband, 1, 10, analog=0)
         (self._b, self._a) = signal.filter_design.butter(order, natural, btype='lowpass', analog=0, output='ba')
         self._zi = signal.lfilter_zi(self._b, self._a)
     
