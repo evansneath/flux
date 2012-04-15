@@ -465,7 +465,7 @@ class EffectWidget(QtGui.QFrame):
 class FluxEffectListWidget(QtGui.QListWidget):
     def add_effects(self, effect_classes):
         """Adds a list of AudioEffect subclasses' names to the view."""
-        for effect in effect_classes:
+        for effect in sorted(effect_classes, key=lambda e:e.name):
             item = QtGui.QListWidgetItem(effect.name)
             item.setToolTip(effect.description)
             self.addItem(item)
