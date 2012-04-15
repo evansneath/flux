@@ -3,79 +3,66 @@ import scipy.signal as signal
 
 from _base import *
 
-class HighPass(AudioEffect):
-    """Creates a high-pass filter using an IIR butterworth filter design.
+class BasicFilter(AudioEffect):
+    """Creates a basic filter function using an IIR filter design.
     
     Parameters:
-        cutoff -- The frequency to pass through. All lower frequencies are cut off. [Hz]
-    """
-    name = 'High-Pass Filter'
-    description = 'Creates a high-pass filter using IIR Butterworth filter design.'
-    
-    def __init__(self):
-        super(HighPass, self).__init__()
-        self.parameters = {'Cutoff':Parameter(float, 20, NYQUIST, 5000)}
-        self.parameters['Cutoff'].value_changed.connect(self.param_changed_event)
-        
-        self._a = None
-        self._b = None
-        self._zi = None
-        self._zo = None
-        self.param_changed_event()
-    
-    def param_changed_event(self):
-        # First get order and designed cutoff from specifications
-        cutoff = self.parameters['Cutoff'].value
-        transition = 0.6 # Hz / Hz
-        passband = cutoff / NYQUIST # passband frequency
-        stopband = passband - transition # stopband frequency
-        
-        if stopband < 0.0: stopband = 0.01 # clip stopband frequency at 0 Hz
-        
-        (order, natural) = signal.filter_design.buttord(passband, stopband, 3, 60, analog=0)
-        (self._b, self._a) = signal.filter_design.butter(order, natural, btype='highpass', analog=0, output='ba')
-        self._zi = signal.lfilter_zi(self._b, self._a)
-    
-    def process_data(self, data):
-        (out, self._zo) = signal.lfilter(self._b, self._a, data, zi=self._zi)
-        self._zi = self._zo
-        return out
-
-class LowPass(AudioEffect):
-    """Creates a low-pass filter using an IIR butterworth filter design.
-    
-    Parameters:
-        cutoff -- The frequency to pass through. All higher frequencies are cut off. [Hz]
+        center -- The center frequency of the filter function. [Hz]
+        type -- The filter function type (LP, HP, BP, BS)
     """
     
-    name = 'Low-Pass Filter'
-    description = 'Creates a low-pass filter using IIR Butterworth filter design.'
+    name = 'Basic Filter'
+    description = 'Filters the incoming signal using an IIR filter design.'
     
     def __init__(self):
-        super(LowPass, self).__init__()
-        self.parameters = {'Cutoff':Parameter(float, 20, NYQUIST, 5000)}
-        self.parameters['Cutoff'].value_changed.connect(self.param_changed_event)
+        super(BasicFilter, self).__init__()
+        self.parameters = {'Center':Parameter(float, 20, NYQUIST, 5000),
+                           'Type':DiscreteParameter({'LP':'', 'HP':'', 'BP':'', 'BS':''}, 'LP')}
+        self.parameters['Center'].value_changed.connect(self.param_changed_event)
+        self.parameters['Type'].value_changed.connect(self.param_changed_event)
         
-        self._a = None
-        self._b = None
+        self._a = None # numerator filter coefficients
+        self._b = None # denominator filter coefficients
         self._zi = None # zero input array
         self._zo = None # zero output array
+        
         self.param_changed_event()
     
     def param_changed_event(self):
         # First get order and designed cutoff from specifications
-        cutoff = self.parameters['Cutoff'].value
-        transition = 0.15 # Hz / Hz
+        f0 = self.parameters['Center'].value
+        type = self.parameters['Type'].value
         
-        passband = cutoff / NYQUIST # passband frequency
-        stopband = passband + transition # stopband frequency
+        # Determine quality factor (Q) based on filter type
+        if type == 'LP': Q = 0.8 # optimized
+        elif type == 'HP': Q = 20 # optimized
+        elif type == 'BP': Q = 0.8 # ok - could use work
+        elif type == 'BS': Q = 5 # ok - gives around 1kHz stopband
         
-        if stopband > 0.99:
-            stopband = 0.99 # clip stopband frequency at nyquist frequency
-            passband = stopband - transition
+        # Perform necessary calculations for filter coefficients
+        w0 = np.pi * f0 / float(NYQUIST)
+        cosw0 = np.cos(w0)
+        sinw0 = np.sin(w0)
+        alpha = sinw0 / (2 * Q)
         
-        (order, natural) = signal.filter_design.buttord(passband, stopband, 1, 10, analog=0)
-        (self._b, self._a) = signal.filter_design.butter(order, natural, btype='lowpass', analog=0, output='ba')
+        if type == 'LP':
+            # Compute lowpass coefficients
+            self._a = np.array([1 + alpha, -2 * cosw0, 1 - alpha])
+            self._b = np.array([(1 - cosw0) / 2, 1 - cosw0, (1 - cosw0) / 2])
+        elif type == 'HP':
+            # Compute highpass coefficients
+            self._a = np.array([1 + alpha, -2 * cosw0, 1 - alpha])
+            self._b = np.array([(1 + cosw0) / 2, -(1 + cosw0), (1+ cosw0) / 2])
+        elif type == 'BP':
+            # Compute bandpass coefficients
+            self._a = np.array([1 + alpha, -2 * cosw0, 1 - alpha])
+            self._b = np.array([alpha, 0, -alpha])
+        elif type == 'BS':
+            # Compute bandstop (notch) coefficients
+            self._a = np.array([1 + alpha, -2 * cosw0, 1 - alpha])
+            self._b = np.array([1, -2 * cosw0, 1])
+        
+        # Compute zero input response
         self._zi = signal.lfilter_zi(self._b, self._a)
     
     def process_data(self, data):
