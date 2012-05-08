@@ -1,5 +1,6 @@
 import serial
 import time
+import platform
 from PySide import QtCore
 
 class PedalThread(QtCore.QThread):    
@@ -10,12 +11,26 @@ class PedalThread(QtCore.QThread):
     
     def __init__(self):
         super(PedalThread, self).__init__()
-        for i in range(256):
-            try:
-                self.connection = serial.Serial(i, 9600, timeout=1)
-            except serial.SerialException:
-                pass
+        baud = 9600
+        connect_fail = False
         
+        if platform.system == 'Darwin':
+            try:
+                # try to connect to device @ /dev/tty.usbserial if using mac
+                self.connection = serial.Serial('/dev/tty.usbserial', baud, timeout=1)
+            except serial.SerialException:
+                # not able to connect on Mac, trying alternate approach next
+                connect_fail = True
+        
+        if platform.system == 'Windows' or connect_fail == True:
+            for i in range(256):
+                try:
+                    # for each port, try to connect to the arduino board
+                    self.connection = serial.Serial(i, baud, timeout=1)
+                    connect_fail = False
+                except serial.SerialException:
+                    connect_fail = True
+    
     def run(self):
         while True: 
             line = self.connection.readline().rstrip()

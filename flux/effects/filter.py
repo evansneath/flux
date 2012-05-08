@@ -69,3 +69,54 @@ class BasicFilter(AudioEffect):
         (out, self._zo) = signal.lfilter(self._b, self._a, data, axis=0, zi=self._zi)
         self._zi = self._zo
         return out
+
+class Equalizer(AudioEffect):
+    """Creates a test equalizer filter function using an IIR filter design.
+    
+    Parameters:
+        low_gain -- The amplitude of the lowband frequency band. [%]
+        mid_gain -- The amplitude of the midband frequency band. [%]
+        high_gain -- The amplitude of the highband frequency band. [%]
+    """
+    
+    name = 'Equalizer'
+    description = 'A test equalizer function using an IIR filter design.'
+    
+    def __init__(self):
+        super(Equalizer, self).__init__()
+        self.parameters = {'Low':Parameter(float, 0., 2., 1.),
+                           'Mid':Parameter(float, 0., 2., 1.),
+                           'High':Parameter(float, 0., 2., 1.)}
+        self.parameters['Low'].value_changed.connect(self.param_changed_event)
+        self.parameters['Mid'].value_changed.connect(self.param_changed_event)
+        self.parameters['High'].value_changed.connect(self.param_changed_event)
+        
+        # cutoff frequencies for eq filters
+        self._lowfreq = 880
+        self._highfreq = 5000
+        
+        self._lp = BasicFilter()
+        self._lp.parameters['Type'].value = 'LP'
+        self._lp.parameters['Center'].value = self._lowfreq
+        
+        self._hp = BasicFilter()
+        self._hp.parameters['Type'].value = 'HP'
+        self._hp.parameters['Center'].value = self._highfreq
+        
+        self.param_changed_event()
+    
+    def param_changed_event(self):
+        self._low_gain = self.parameters['Low'].value
+        self._mid_gain = self.parameters['Mid'].value
+        self._high_gain = self.parameters['High'].value
+    
+    def process_data(self, data):
+        l_data = self._lp.process_data(data)
+        h_data = self._hp.process_data(data)
+        m_data = data - (l_data + h_data)
+        
+        l_data *= self._low_gain
+        h_data *= self._high_gain
+        m_data *= self._mid_gain
+        
+        return (l_data + m_data + h_data)
