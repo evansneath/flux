@@ -9,30 +9,40 @@ class PedalThread(QtCore.QThread):
     action_clicked = QtCore.Signal()
     action_longpress = QtCore.Signal()
     
+    # holds serial connection object
+    connection = None
+    
+    # holds default serial connection attributes
+    baud = 9600
+    timeout = 1
+    
+    # connection failed flag
+    connected = False
+    
     def __init__(self):
         super(PedalThread, self).__init__()
-        baud = 9600
-        connect_fail = False
         
-        if platform.system == 'Darwin':
+        os = platform.system()
+        
+        if os == 'Darwin':            
             try:
                 # try to connect to device @ /dev/tty.usbserial if using mac
-                self.connection = serial.Serial('/dev/tty.usbserial', baud, timeout=1)
-            except serial.SerialException:
-                # not able to connect on Mac, trying alternate approach next
-                connect_fail = True
-        
-        if platform.system == 'Windows' or connect_fail == True:
+                self.connection = serial.Serial('/dev/tty.usbserial-A7006Rfp', self.baud, timeout=self.timeout)
+                self.connected = True
+            except serial.SerialException as e:
+                # not able to connect on os x
+                print 'pedal connection failed:', e
+        elif os == 'Windows':
             for i in range(256):
                 try:
                     # for each port, try to connect to the arduino board
-                    self.connection = serial.Serial(i, baud, timeout=1)
-                    connect_fail = False
-                except serial.SerialException:
-                    connect_fail = True
+                    self.connection = serial.Serial(i, self.baud, timeout=self.timeout)
+                    self.connected = True
+                except serial.SerialException as e:
+                    print 'pedal connection failed:', e
     
     def run(self):
-        while True: 
+        while True and self.connected: 
             line = self.connection.readline().rstrip()
             if line == 'L1':
                 self.left_clicked.emit()

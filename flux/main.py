@@ -700,7 +700,7 @@ if __name__ == '__main__':
     window = FluxWindow(app)
     
     try:
-        pedal_thread = PedalThread()
+        pedal_thread = pedal.PedalThread()
         pedal_thread.left_clicked.connect(window.tab_left_event)
         pedal_thread.right_clicked.connect(window.tab_right_event)
         pedal_thread.action_clicked.connect(window.pause_action.toggle)
