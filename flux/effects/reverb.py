@@ -14,7 +14,8 @@ class Reverb(AudioEffect):
         super(Reverb, self).__init__()
         
         self.parameters = {'Amount':Parameter(float, 0, 0.5, .1)}
-        self.delay = samples_from_ms(125)
+        self.delay = samples_from_ms(75
+                                     )
         self.feedback = 0.5
         
         self.delay_line = None
