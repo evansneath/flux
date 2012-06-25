@@ -1,4 +1,9 @@
-*.pyc
-*.DS_Store
-*.komodoproject
-*.komodotool
+# Python packages
+*.py[co]
+
+# Komodo project files
+*.komodo*
+
+# Eclipse/PyDev project files
+*.project
+*.pydevproject

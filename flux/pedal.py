@@ -29,17 +29,18 @@ class PedalThread(QtCore.QThread):
                 # try to connect to device @ /dev/tty.usbserial if using mac
                 self.connection = serial.Serial('/dev/tty.usbserial-A7006Rfp', self.baud, timeout=self.timeout)
                 self.connected = True
-            except serial.SerialException as e:
-                # not able to connect on os x
-                print 'pedal connection failed:', e
+            except serial.SerialException:
+                # not able to connect on os x. fail quietly.
+                pass
         elif os == 'Windows':
             for i in range(256):
                 try:
                     # for each port, try to connect to the arduino board
                     self.connection = serial.Serial(i, self.baud, timeout=self.timeout)
                     self.connected = True
-                except serial.SerialException as e:
-                    print 'pedal connection failed:', e
+                except serial.SerialException:
+                    # not able to connect on windows. fail quietly.
+                    pass
     
     def run(self):
         while True and self.connected: 

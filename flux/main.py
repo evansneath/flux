@@ -212,7 +212,6 @@ class FluxCentralWidget(QtGui.QTabWidget):
             else:
                 self.setCurrentIndex(self.count() - 1)
                 
-                
     def add_widget(self, widget):
         if self.count():
             self.currentWidget().layout.addWidget(widget)
@@ -556,7 +555,7 @@ class FluxLoopWidget(QtGui.QWidget):
         
         for button in self.play_button, self.pause_button, self.stop_button, self.record_button:
             button.setFlat(True)
-            
+        
         self.layout.addWidget(self.play_button)
         self.layout.addWidget(self.pause_button)
         self.layout.addWidget(self.stop_button)
@@ -708,5 +707,6 @@ if __name__ == '__main__':
     except NameError:
         #pedal wasn't imported correctly
         pass
+    
     window.show()
     app.exec_()

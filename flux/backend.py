@@ -47,8 +47,8 @@ class AudioPath(QtCore.QObject):
         self.playback_track = None
         
     def start_recording(self):
-        self.recording_loop = True
         self.record_track = np.array([])
+        self.recording_loop = True
     
     def stop_recording(self):
         self.recording_loop = False
@@ -91,7 +91,7 @@ class AudioPath(QtCore.QObject):
                 data = effect.process_data(data)
 
         #add the recorded track to the data
-        if self.playing_loop:
+        if self.playing_loop and len(data) != 0:
             data += self.playback_track[:len(data)]
             self.playback_track = np.roll(self.playback_track, -len(data))
             
@@ -100,6 +100,3 @@ class AudioPath(QtCore.QObject):
         #record the data it's written to the sink to reduce latency
         if self.recording_loop:
             self.record_track = np.concatenate((self.record_track, data))
-        
-        
-        

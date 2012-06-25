@@ -1,3 +1,5 @@
+import collections
+
 import numpy as np
 import scipy.signal as signal
 
@@ -11,7 +13,7 @@ class BasicFilter(AudioEffect):
         type -- The filter function type (LP, HP, BP, BS)
     """
     
-    name = 'Basic Filter'
+    name = 'Basic Filters'
     description = 'Filters the incoming signal using an IIR filter design.'
     
     def __init__(self):
@@ -79,14 +81,14 @@ class Equalizer(AudioEffect):
         high_gain -- The amplitude of the highband frequency band. [%]
     """
     
-    name = 'Equalizer'
+    name = '3-Band Equalizer'
     description = 'A test equalizer function using an IIR filter design.'
     
     def __init__(self):
         super(Equalizer, self).__init__()
-        self.parameters = {'Low':Parameter(float, 0., 2., 1.),
-                           'Mid':Parameter(float, 0., 2., 1.),
-                           'High':Parameter(float, 0., 2., 1.)}
+        self.parameters = collections.OrderedDict((('Low',Parameter(float, 0., 2., 1.)),
+                           ('Mid',Parameter(float, 0., 2., 1.)),
+                           ('High',Parameter(float, 0., 2., 1.))))
         self.parameters['Low'].value_changed.connect(self.param_changed_event)
         self.parameters['Mid'].value_changed.connect(self.param_changed_event)
         self.parameters['High'].value_changed.connect(self.param_changed_event)
