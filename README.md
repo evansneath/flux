@@ -6,7 +6,7 @@ Flux is free, open-source and written completely in the Python programming langu
     
 ##Contributers
 * [Evan Sneath](https://github.com/evansneath)
-* [AJ Alt](https://github.com/narcoeli)
+* [AJ Alt](https://github.com/ajalt)
 * [Paul Musgrave](https://github.com/pmusgrave)
 
 ##License
@@ -25,6 +25,8 @@ The following are dependencies for Flux. The library versions listed are the onl
 * [SciPy 0.10.1](http://scipy.org/)
 
 ##Installation
-To run Flux, download the source code and all dependencies, and run the following command while in the flux root directory.
+To run Flux on Windows, download the latest Windows installer at the [Flux Downloads](http://github.com/evansneath/flux/downloads) page.
+
+To run Flux on OS X, download the source code and all dependencies, and run the following command while in the flux root directory.
 
     python2.7 flux/main.py
